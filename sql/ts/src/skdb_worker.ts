@@ -1,6 +1,6 @@
 import { type ModuleInit } from "#std/sk_types.js";
 import { createOnThisThread } from "./skdb_create.js";
-import { onWorkerMessage } from "#std/sk_worker.js";
+import { onWorkerMessage, imhere } from "#std/sk_worker.js";
 import type { Creator } from "#std/sk_worker.js";
 import type { SKDB } from "./skdb.js";
 
@@ -23,7 +23,7 @@ class DbCreator implements Creator<SKDB> {
 
 const creator = new DbCreator();
 
-var post = (message: any) => {
+const post = (message: any) => {
   postMessage(message);
 };
 
@@ -31,3 +31,4 @@ var onMessage = (message: MessageEvent) =>
   onWorkerMessage(message.data, post, creator);
 
 addEventListener("message", onMessage);
+imhere(post);

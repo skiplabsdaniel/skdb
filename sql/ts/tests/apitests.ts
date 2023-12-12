@@ -932,7 +932,21 @@ async function testJSGroups(skdb1: SKDB, skdb2: SKDB) {
   ).toHaveLength(0);
 }
 
-export const apitests = (asWorker) => {
+async function testWorker(skdb: SKDB) {
+  let terminate = (skdb as any).terminate;
+  if (terminate) {
+    terminate();
+    await new Promise((resolve) => setTimeout(resolve, 11000));
+    const rows = await skdb.exec("SELECT x,y FROM test_pk WHERE x=@x;", {
+      x: 42,
+    });
+    expect(rows).toEqual([{ x: 42, y: 21 }]);
+  } else {
+    throw new Error("Not a skdb worker");
+  }
+}
+
+export const apitests = (asWorker: boolean) => {
   return [
     {
       name: asWorker ? "API in Worker" : "API",
@@ -954,6 +968,9 @@ export const apitests = (asWorker) => {
         await testLargeMirror(dbs.root, dbs.user);
 
         await testMirrorWithAuthor(dbs.root, dbs.user, dbs.user2);
+        if (asWorker) {
+          await testWorker(dbs.user);
+        }
 
         await testConstraints(dbs.root, dbs.user);
 
