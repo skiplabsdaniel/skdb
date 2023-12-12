@@ -35,6 +35,7 @@ export async function createSkdb(
     asWorker?: boolean;
     getWasmSource?: () => Promise<Uint8Array>;
     disableWarnings?: boolean;
+    workerReload?: number;
   } = {},
 ): Promise<SKDB> {
   const asWorker = options.asWorker ?? !options.getWasmSource;
@@ -50,7 +51,7 @@ export async function createSkdb(
     if (options.getWasmSource) {
       throw new Error("getWasmSource is not compatible with worker");
     }
-    return createWorker(disableWarnings, options.dbName);
+    return createWorker(disableWarnings, options.dbName, options.workerReload);
   }
 }
 
