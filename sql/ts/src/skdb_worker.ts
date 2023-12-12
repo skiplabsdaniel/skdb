@@ -1,6 +1,10 @@
 import { type ModuleInit } from "@skip-wasm/std";
 import { createOnThisThread } from "./skdb_create.js";
-import { onWorkerMessage, type Creator } from "@skip-wasm/std/worker.js";
+import {
+  onWorkerMessage,
+  type Creator,
+  imhere,
+} from "@skip-wasm/std/worker.js";
 import type { SKDB } from "./skdb.js";
 
 import { init as runtimeInit } from "@skip-wasm/std/runtime.js";
@@ -43,3 +47,4 @@ const onMessage = (message: MessageEvent) => {
 };
 
 addEventListener("message", onMessage);
+imhere(post);

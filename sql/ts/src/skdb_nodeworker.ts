@@ -1,12 +1,16 @@
-import { onDbWorkerMessage } from "./skdb_wmessage.js";
+import { onDbWorkerMessage, imhere } from "./skdb_wmessage.js";
 import { parentPort } from "worker_threads";
 
 const post = (message: any) => {
   parentPort?.postMessage(message);
 };
 
-const onMessage = (message: MessageEvent) => {
-  onDbWorkerMessage(message, post);
+const close = () => {
+  parentPort?.close();
 };
 
+const onMessage = (message: MessageEvent) =>
+  onDbWorkerMessage(message, post, close);
+
 parentPort?.on("message", onMessage);
+imhere(post);
