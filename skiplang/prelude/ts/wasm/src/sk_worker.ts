@@ -148,6 +148,7 @@ export class PromiseWorker {
   private subscriptions: Map<string, (...args: any[]) => void>;
   private mark: Date;
   private registered: Callable[];
+  private posted: Message[];
   private unregister: Map<string, Function>;
   private reloaded: number;
   public reloading: boolean;
@@ -167,6 +168,7 @@ export class PromiseWorker {
     this.mark = new Date();
     this.registered = [];
     this.unregister = new Map();
+    this.posted = [];
     this.reloading = false;
     this.reloaded = 0;
 
@@ -203,6 +205,13 @@ export class PromiseWorker {
         }
       }
     };
+    const received = (msgId: MessageId) => {
+      for (let i = 0; i < this.posted.length; i++) {
+        if (this.posted[i]!.id == msgId) {
+          this.posted.splice(i, 1);
+        }
+      }
+    };
     this.post = async (fn: Function | Caller) => {
       if (!this.check()) {
         await this.reload();
@@ -229,6 +238,7 @@ export class PromiseWorker {
       const deleteUnr = this.unregister.delete.bind(this.unregister);
       const setCallback = this.callbacks.set.bind(this.callbacks);
       const postMessage = this.worker.postMessage.bind(this.worker);
+      const pushPosted = this.posted.push.bind(this.posted);
       return new Sender(
         () => {
           subscribed.forEach((key) => deleteSub(key));
@@ -258,6 +268,7 @@ export class PromiseWorker {
               }
             });
             const message = new Message(messageId, fn);
+            pushPosted(message);
             postMessage(message);
           }),
       );
@@ -275,6 +286,7 @@ export class PromiseWorker {
         throw new UnmanagedMessage(JSON.stringify(message));
       } else {
         const result = data.payload as Return;
+        received(data.id);
         const callId = asKey(data.id);
         const callback = this.callbacks.get(callId);
         if (callback) {
@@ -304,11 +316,14 @@ export class PromiseWorker {
       return true;
     };
     this.reload = async () => {
+      console.log("///// RELOAD //////");
       // Just in case is not really shutdown
       this.shutdown();
       this.reloading = true;
       const toRegister = this.registered;
+      const toPost = this.posted;
       this.registered = [];
+      this.posted = [];
       this.callbacks = new Map();
       this.subscriptions = new Map();
       this.unregister = new Map();
@@ -318,6 +333,9 @@ export class PromiseWorker {
       for (const fn of toRegister) {
         const sender = await this.post(fn);
         await sender.send();
+      }
+      for (const posted of toPost) {
+        await this.post(posted.payload as Callable);
       }
       this.reloading = false;
       this.reloaded++;
