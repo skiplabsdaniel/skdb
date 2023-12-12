@@ -23,6 +23,10 @@ class WrkImpl implements Wrk {
   onMessage = (listener: (value: any) => void) => {
     this.worker.on("message", listener);
   };
+
+  shutdown = () => this.worker.postMessage("#shutdown");
+  
+  terminate = () => this.worker.terminate();
 }
 
 const decoder = new util.TextDecoder("utf8");
