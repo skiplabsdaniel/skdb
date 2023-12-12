@@ -555,6 +555,21 @@ class ResilientStream {
     this.setFailureDetectionTimeout(undefined);
   }
 
+  replaceOnError(
+    onError: (errorCode: number, msg: string) => void,
+    set: boolean,
+  ) {
+    if (!this.stream) return undefined;
+    let old = this.stream.onError;
+    if (set || !old) this.stream.onError = onError;
+    else
+      this.stream.onError = (errorCode: number, msg: string) => {
+        old!(errorCode, msg);
+        onError(errorCode, msg);
+      };
+    return old;
+  }
+
   send(data: ArrayBuffer): void {
     if (!this.stream) {
       // black hole the data. we're reconnecting and will call
@@ -1410,6 +1425,7 @@ class SKDBServer implements RemoteSKDB {
   private mirroredTables: Map<string, string> = new Map();
   private mirrorStreams: Set<ResilientStream> = new Set();
   private onRebootFn?: () => void;
+  private created: Date;
 
   private constructor(
     env: Environment,
@@ -1421,6 +1437,7 @@ class SKDBServer implements RemoteSKDB {
     this.client = client;
     this.connection = connection;
     this.creds = creds;
+    this.created = new Date();
   }
 
   static async connect(
@@ -1581,7 +1598,6 @@ class SKDBServer implements RemoteSKDB {
         stream.send(buildTailRequest());
         stream.expectingData();
       };
-
       stream.send(buildTailRequest());
       stream.expectingData();
     });

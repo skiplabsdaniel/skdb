@@ -153,6 +153,10 @@ test-native: build/skdb
 test-client: build/sknpm
 	cd sql && ../build/sknpm test --profile $(SKARGO_PROFILE) $(SKNPM_FLAG) client
 
+.PHONY: test-server
+test-server: build/sknpm $(SKDB_WASM) $(SDKMAN_DIR)
+	cd sql && ../build/sknpm test --profile $(SKARGO_PROFILE) $(SKNPM_FLAG) server
+
 .PHONY: test-replication
 test-replication: build/skdb
 	./sql/test/replication/test_pk.py
