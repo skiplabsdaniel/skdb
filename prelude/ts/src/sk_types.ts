@@ -143,6 +143,8 @@ export interface System {
 export interface Wrk {
   postMessage: (message: any) => void;
   onMessage: (listener: (value: any) => void) => void;
+  shutdown: () => void;
+  terminate: () => void;
 }
 
 export interface Environment {

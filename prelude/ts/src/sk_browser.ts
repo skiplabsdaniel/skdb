@@ -19,6 +19,9 @@ class WrkImpl implements Wrk {
   onMessage = (listener: (value: any) => void) => {
     this.worker.onmessage = listener;
   };
+
+  shutdown = () => this.worker.postMessage("#shutdown");
+  terminate = () => this.worker.terminate();
 }
 
 class Env implements Environment {
