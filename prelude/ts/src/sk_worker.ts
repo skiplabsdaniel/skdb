@@ -194,9 +194,11 @@ export class PromiseWorker {
   private posted: Message[];
   private unregister: Map<string, Function>;
   private reloaded: number;
-  public reloading: boolean;
 
   private reload: () => Promise<void>;
+  
+  public reloading: boolean;
+  public postponed: (() => void)[];
 
   post: (fn: Function) => Promise<Sender>;
   onMessage: (message: MessageEvent) => void;
@@ -212,6 +214,7 @@ export class PromiseWorker {
     this.registered = [];
     this.unregister = new Map();
     this.posted = [];
+    this.postponed = [];
     this.reloading = false;
     this.reloaded = 0;
 
@@ -254,7 +257,8 @@ export class PromiseWorker {
     };
     let self = this;
     this.post = async (fn: Function | Caller) => {
-      if (!this.check()) {
+      var reloading = this.reloading;
+      if (!reloading && !this.check()) {
         await this.reload();
       }
       checkRegistration(fn);
@@ -289,8 +293,8 @@ export class PromiseWorker {
             }
           }
         },
-        () =>
-          new Promise(function (resolve, reject) {
+        () => {
+          const pFun = function (resolve, reject) {
             self.callbacks.set(asKey(messageId), (result: Return) => {
               if (result.success) {
                 resolve(result.value);
@@ -303,7 +307,15 @@ export class PromiseWorker {
             let message = new Message(messageId, fn);
             self.posted.push(message);
             self.worker.postMessage(message);
-          }),
+          };
+          return new Promise(function (resolve, reject) {
+            if (reloading) {
+              self.postponed.push(() => pFun(resolve, reject))
+            } else {
+              pFun(resolve, reject)
+            }
+          })
+        }
       );
     };
 
@@ -373,6 +385,10 @@ export class PromiseWorker {
       }
       for (let i = 0; i < toPost.length; i++) {
         this.post(toPost[i].payload as Callable);
+      }
+      while (this.postponed.length > 0) {
+        const postponed = this.postponed.shift();
+        postponed!();
       }
       this.reloading = false;
       this.reloaded++;
