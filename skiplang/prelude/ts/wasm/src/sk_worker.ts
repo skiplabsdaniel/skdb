@@ -151,9 +151,11 @@ export class PromiseWorker {
   private posted: Message[];
   private unregister: Map<string, Function>;
   private reloaded: number;
-  public reloading: boolean;
 
   private reload: () => Promise<void>;
+
+  public reloading: boolean;
+  public postponed: (() => void)[];
 
   post: (fn: Function) => Promise<Sender>;
   onMessage: (message: MessageEvent) => void;
@@ -169,6 +171,7 @@ export class PromiseWorker {
     this.registered = [];
     this.unregister = new Map();
     this.posted = [];
+    this.postponed = [];
     this.reloading = false;
     this.reloaded = 0;
 
@@ -213,7 +216,8 @@ export class PromiseWorker {
       }
     };
     this.post = async (fn: Function | Caller) => {
-      if (!this.check()) {
+      const reloading = this.reloading;
+      if (!reloading && !this.check()) {
         await this.reload();
       }
       checkRegistration(fn);
@@ -239,6 +243,7 @@ export class PromiseWorker {
       const setCallback = this.callbacks.set.bind(this.callbacks);
       const postMessage = this.worker.postMessage.bind(this.worker);
       const pushPosted = this.posted.push.bind(this.posted);
+      const pushPostponed = this.postponed.push.bind(this.postponed);
       return new Sender(
         () => {
           subscribed.forEach((key) => deleteSub(key));
@@ -255,12 +260,14 @@ export class PromiseWorker {
             }
           }
         },
-        () =>
-          new Promise(function (resolve, reject) {
+        () => {
+          const pFun = function <T>(
+            resolve: (value: T | PromiseLike<T>) => void,
+            reject: (reason?: any) => void,
+          ) {
             setCallback(asKey(messageId), (result: Return) => {
               if (result.success) {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-                resolve(result.value);
+                resolve(result.value as T);
               } else if (result.value instanceof Error) {
                 reject(result.value);
               } else {
@@ -270,7 +277,15 @@ export class PromiseWorker {
             const message = new Message(messageId, fn);
             pushPosted(message);
             postMessage(message);
-          }),
+          };
+          return new Promise(function (resolve, reject) {
+            if (reloading) {
+              pushPostponed(() => pFun(resolve, reject));
+            } else {
+              pFun(resolve, reject);
+            }
+          });
+        },
       );
     };
 
@@ -336,6 +351,10 @@ export class PromiseWorker {
       }
       for (const posted of toPost) {
         await this.post(posted.payload as Callable);
+      }
+      while (this.postponed.length > 0) {
+        const postponed = this.postponed.shift();
+        postponed!();
       }
       this.reloading = false;
       this.reloaded++;
