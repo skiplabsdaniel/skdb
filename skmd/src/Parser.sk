@@ -180,8 +180,9 @@ fun parseElements(
 /* Parse parens and brackets. */
 /*****************************************************************************/
 
-fun lex(input: Accessor): mutable Iterator<(Char, Int)> {
+fun lex(input: Accessor): mutable Iterator<(Char, Int, ?Char)> {
   i = 0;
+  p: ?Char = None();
   loop {
     if (i >= input.size()) break void;
     c = input[i];
@@ -193,51 +194,56 @@ fun lex(input: Accessor): mutable Iterator<(Char, Int)> {
         !i = i + 1;
         !j = j + 1;
       };
-      yield (c, j);
+      yield (c, j, p);
     } else {
-      yield (c, 1);
+      yield (c, 1, p);
       !i = i + 1;
-    }
+    };
+    !p = Some(c);
   }
 }
 
-fun parseParens(input: Accessor): Array<(Char, Array<Char>)> {
+fun parseParens(input: Accessor): Array<(Char, Array<Char>, ?Char)> {
   iter = lex(input);
   acc = mutable Vector[];
   result = mutable Vector[];
-  openingOpt: ?Char = None();
-  flush = (c) -> {
+  openingOpt: ?(Char, ?Char) = None();
+  flush: (Char, ?Char) -> void = (c, prev) -> {
     if (acc.size() != 0) {
-      result.push((c, acc.toArray()));
+      result.push((c, acc.toArray(), prev));
       acc.clear();
     }
   };
   loop {
     loop {
-      (c, _repeat) = iter.next() match {
+      (c, _repeat, prev) = iter.next() match {
       | None() ->
-        flush(' ');
+        flush(' ', None());
         return result.toArray()
       | Some(c) -> c
       };
       if (c == '(' || c == '[') {
-        !openingOpt = Some(c);
-        flush(' ');
+        if (c == '[') {
+          !openingOpt = Some((c, prev))
+        } else {
+          !openingOpt = Some((c, None()))
+        };
+        flush(' ', None());
         acc.push(c);
         break void;
       };
       if (c == '*' || c == '_' || c == '`') {
-        !openingOpt = Some(c);
-        flush(' ');
+        !openingOpt = Some((c, None()));
+        flush(' ', None());
         acc.push(c);
         break void;
       };
       acc.push(c);
     };
     loop {
-      (c, _repeat) = iter.next() match {
+      (c, _repeat, _) = iter.next() match {
       | None() ->
-        flush(' ');
+        flush(' ', None());
         return result.toArray()
       | Some(c) -> c
       };
@@ -245,38 +251,38 @@ fun parseParens(input: Accessor): Array<(Char, Array<Char>)> {
         iter.next() match {
         | None() ->
           acc.push(c);
-          flush(' ');
+          flush(' ', None());
           return result.toArray()
-        | Some((x, _)) ->
+        | Some((x, _, _)) ->
           acc.push(x);
           continue
         };
       };
       acc.push(c);
       opening = openingOpt.fromSome();
-      if (opening == '(' && c == ')') {
+      if (opening.i0 == '(' && c == ')') {
         !openingOpt = None();
-        flush(opening);
+        flush(opening.i0, None());
         break void;
       };
-      if (opening == '[' && c == ']') {
+      if (opening.i0 == '[' && c == ']') {
         !openingOpt = None();
-        flush(opening);
+        flush(opening.i0, opening.i1);
         break void;
       };
-      if (opening == '*' && c == '*') {
+      if (opening.i0 == '*' && c == '*') {
         !openingOpt = None();
-        flush(opening);
+        flush(opening.i0, None());
         break void;
       };
-      if (opening == '_' && c == '_') {
+      if (opening.i0 == '_' && c == '_') {
         !openingOpt = None();
-        flush(opening);
+        flush(opening.i0, None());
         break void;
       };
-      if (opening == '`' && c == '`') {
+      if (opening.i0 == '`' && c == '`') {
         !openingOpt = None();
-        flush(opening);
+        flush(opening.i0, None());
         break void;
       };
     }
@@ -286,13 +292,15 @@ fun parseParens(input: Accessor): Array<(Char, Array<Char>)> {
 base class TextElement uses Equality {
   children =
   | TELink(String, String, ?String)
+  | TEImage(String, String, ?String)
+  | TEAnchor(String, String)
   | TEBold(String)
   | TEEmphasis(String)
   | TECode(String)
   | TEText(String)
 }
 
-fun makeElement(elt: (Char, Array<Char>)): TextElement {
+fun makeElement(elt: (Char, Array<Char>, ?Char)): TextElement {
   full = () -> String::fromChars(elt.i1);
   stripped = () -> String::fromChars(elt.i1.slice(1, elt.i1.size() - 1));
   elt.i0 match {
@@ -346,11 +354,29 @@ fun splitAccessor(input: Accessor): Array<TextElement> {
     };
     if (curr.i0 == '[' && nextElt.i0 == '(') {
       link = parseLink(nextElt.i1.slice(1, nextElt.i1.size() - 1));
+      if (curr.i2 == Some('!')) {
+        push(
+          TEImage(
+            String::fromChars(curr.i1.slice(1, curr.i1.size() - 1)),
+            link.i0,
+            link.i1,
+          ),
+        )
+      } else {
+        push(
+          TELink(
+            String::fromChars(curr.i1.slice(1, curr.i1.size() - 1)),
+            link.i0,
+            link.i1,
+          ),
+        )
+      };
+      !ignore = true;
+    } else if (curr.i0 == '[' && nextElt.i0 == '{') {
       push(
-        TELink(
+        TEAnchor(
           String::fromChars(curr.i1.slice(1, curr.i1.size() - 1)),
-          link.i0,
-          link.i1,
+          String::fromChars(nextElt.i1.slice(1, nextElt.i1.size() - 1)),
         ),
       );
       !ignore = true;

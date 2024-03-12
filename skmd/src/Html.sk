@@ -94,6 +94,7 @@ class Config{
   }
 }
 
+// TODO: manage special chars &xxx;
 fun convertToHtml{
   markdown: String,
   buffer: mutable Vector<String>,
@@ -249,8 +250,70 @@ fun convert(entities: Vector<Entity>): Vector<HTMLElement> {
           convert(subentities),
         ),
       )
+    | DivBlock(className, subentities, _) ->
+      elements.push(
+        HTMLElement(
+          "div",
+          Map["class" => JSON.String(className.toString())],
+          convert(subentities),
+        ),
+      )
+    | Table(size, header, body, foot, _, _) ->
+      elements.push(
+        HTMLElement("table", Map[], convertTable(size, header, body, foot)),
+      )
     };
     !idx = idx + 1;
+  };
+  elements.chill()
+}
+
+fun convertTable(
+  size: Int,
+  head: Vector<Vector<CellBlock>>,
+  body: Vector<Vector<CellBlock>>,
+  foot: Vector<Vector<CellBlock>>,
+): Vector<HTMLElement> {
+  elements = mutable Vector<HTMLElement>[];
+  if (!head.isEmpty()) {
+    elements.push(HTMLElement("thead", Map[], convertRows(size, head, true)))
+  };
+  elements.push(HTMLElement("tbody", Map[], convertRows(size, body)));
+  if (!foot.isEmpty()) {
+    elements.push(HTMLElement("tfoot", Map[], convertRows(size, foot)))
+  };
+  elements.chill()
+}
+
+fun convertRows(
+  size: Int,
+  rows: Vector<Vector<CellBlock>>,
+  head: Bool = false,
+): Vector<HTMLElement> {
+  rows.map(row -> HTMLElement("tr", Map[], convertRow(size, row, head)))
+}
+
+fun convertRow(
+  size: Int,
+  row: Vector<CellBlock>,
+  head: Bool,
+): Vector<HTMLElement> {
+  elements = mutable Vector<HTMLElement>[];
+  for (i in Range(0, size)) {
+    row.maybeGet(i) match {
+    | Some(cell) ->
+      elements.push(
+        HTMLElement(if (head) "th" else "td", Map[], convert(cell.entities)),
+      )
+    | _ ->
+      elements.push(
+        HTMLElement(
+          if (head) "th" else "td",
+          Map[],
+          Vector[HTMLHtml("&nbsp;")],
+        ),
+      )
+    }
   };
   elements.chill()
 }
@@ -378,6 +441,33 @@ fun textElementToHtml(elem: TextElement): String {
         `<a href="${url.escaped()}">${text}</a>`
       }
     }
+  | TEImage(lalt, src, optTitle) ->
+    url = Url::parse(Accessor::fromVector(src.chars()));
+    alt = toEncoded(lalt.chars());
+    if (alt.isEmpty()) {
+      optTitle match {
+      | Some(title) -> `<img src="${url.escaped()}" title="${title}"></img>`
+      | _ -> `<img src="${url.escaped()}"></img>`
+      }
+    } else {
+      optTitle match {
+      | Some(title) ->
+        `<img src="${url.escaped()}" title="${title}" alt="${alt}"></img>`
+      | _ -> `<img src="${url.escaped()}" alt="${alt}"></img>`
+      }
+    }
+  | TEAnchor(atext, aanchor) ->
+    chars = aanchor.chars();
+    hashtag = 0;
+    while (chars.maybeGet(hashtag) == Some('#')) {
+      !hashtag = hashtag + 1;
+    };
+    if (hashtag > 0) {
+      !chars = chars.drop(hashtag);
+    };
+    text = toEncoded(atext.chars());
+    anchor = toEncoded(chars);
+    `<a href="${anchor}">${text}</a>`
   | TEBold(text) -> `<strong>${text}</strong>`
   | TEEmphasis(text) -> `<em>${text}</em>`
   | TECode(text) -> `<code>${text}</code>`

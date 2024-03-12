@@ -221,6 +221,16 @@ class Accessor(
     )
   }
 
+  fun all(predicate: Char ~> Bool): Bool {
+    for (i in Range(0, this.size())) {
+      if (!predicate(this[i])) {
+        break false
+      }
+    } else {
+      true
+    }
+  }
+
   fun toString(): String {
     String::fromChars(this.toArray());
   }
@@ -362,6 +372,7 @@ const blocks: Array<Accessor ~> ?mutable BlockEntity> = Array[
   ListBlock::create,
   CodeBlock::create,
   BlockQuote::create,
+  DivBlock::create,
 ];
 
 mutable base class MainBlock(
@@ -538,6 +549,42 @@ mutable class BlockQuote extends BlockEntity, MainBlock {
   }
 }
 
+mutable class DivBlock(className: Accessor) extends BlockEntity, MainBlock {
+  //
+  static fun create(line: Accessor): ?mutable this {
+    count = line.countAsLongAs(c ~> c == ':');
+    if (count == 3) {
+      Some(mutable DivBlock(line.drop(count)))
+    } else {
+      None()
+    }
+  }
+
+  mutable fun check(line: Accessor): ?Bool {
+    if (
+      line.maybeGet(0) == Some(':') &&
+      line.maybeGet(1) == Some(':') &&
+      line.maybeGet(2) == Some(':')
+    ) {
+      return Some(true)
+    };
+    this.manage(line);
+    None()
+  }
+
+  readonly fun close(): this {
+    DivBlock(this.className, this.getEntities())
+  }
+
+  readonly fun toString(): String {
+    (
+      this.getClassName(),
+      this.className.toString(),
+      this.getEntities().map(l -> l.toString()).toArray(),
+    ).toString()
+  }
+}
+
 mutable class HeaderBlock(level: Int) extends BlockEntity, MainBlock {
   //
   readonly fun getId(): ?String {
@@ -591,6 +638,140 @@ mutable class HeaderBlock(level: Int) extends BlockEntity, MainBlock {
       this.getClassName(),
       this.level.toString(),
       this.getEntities().map(l -> l.toString()).toArray(),
+    ).toString()
+  }
+}
+
+mutable class CellBlock extends MainBlock uses Show {
+  //
+  readonly fun close(): this {
+    CellBlock(this.getEntities())
+  }
+
+  readonly fun toString(): String {
+    (
+      this.getClassName(),
+      this.getEntities().map(l -> l.toString()).toArray(),
+    ).toString()
+  }
+}
+
+mutable class Table(
+  size: Int = 0,
+  head: mutable Vector<Vector<CellBlock>> = mutable Vector[],
+  body: mutable Vector<Vector<CellBlock>> = mutable Vector[],
+  foot: mutable Vector<Vector<CellBlock>> = mutable Vector[],
+  rows: mutable Vector<Vector<Accessor>> = mutable Vector[],
+  mutable kind: Int = 0,
+) extends BlockEntity {
+  //
+  static fun create(line: Accessor): ?mutable this {
+    // +-+-+-+-+
+    if (line.maybeGet(0) != Some('+')) {
+      return None();
+    };
+    count = 0;
+    size = 0;
+    for (i in Range(1, line.size())) {
+      line.get(i) match {
+      | '-' if (count > 0) -> !count = count + 1
+      | '+' if (count > 0) ->
+        !count = 0;
+        !size = size + 1
+      | c if (Chars.isWhitespace(c)) -> void
+      | '+' | _ -> return None()
+      }
+    };
+    Some(mutable Table(size))
+  }
+
+  mutable fun pushRows(): void {
+    cells = mutable Vector[];
+    for (i in Range(0, this.size)) {
+      cell = mutable CellBlock();
+      for (j in Range(0, this.rows.size())) {
+        this.rows[j].maybeGet(i).each(cell.manage)
+      };
+      cells.push(cell.close())
+    };
+    this.kind match {
+    | 0 -> this.head.push(cells.chill())
+    | 1 -> this.body.push(cells.chill())
+    | _ -> this.foot.push(cells.chill())
+    }
+  }
+
+  mutable fun check(line: Accessor): ?Bool {
+    if (line.isEmpty()) {
+      this.pushRows();
+      return Some(true)
+    };
+    line.maybeGet(0) match {
+    | Some('|') ->
+      row = mutable Vector[];
+      index = 1;
+      start = index;
+      while (index < line.size()) {
+        line.get(index) match {
+        | '|' ->
+          row.push(line.slice(start, index));
+          !start = index + 1
+        | _ -> void
+        };
+        !index = index + 1;
+      };
+      this.rows.push(row.chill())
+    | Some('+') ->
+      if (
+        line.all(c ~>
+          c match {
+          | '+' | '-' -> true
+          | o -> Chars.isWhitespace(o)
+          }
+        )
+      ) {
+        // +-+-+-+-+
+        // Separator
+        // Add current rows to header, body or footer
+        this.pushRows();
+      } else if (
+        line.all(c ~>
+          c match {
+          | '+' | '=' -> true
+          | o -> Chars.isWhitespace(o)
+          }
+        )
+      ) {
+        // +=+=+=+=+
+        // kind seperator
+        // Add current rows to header, body or footer
+        // Go to next kind
+        this.pushRows();
+        this.!kind = this.kind + 1
+      }
+    | _ ->
+      this.pushRows();
+      return Some(false)
+    };
+    None()
+  }
+
+  readonly fun close(): this {
+    Table(
+      this.size,
+      this.head.chill(),
+      this.body.chill(),
+      this.foot.chill(),
+      Vector[],
+    )
+  }
+
+  readonly fun toString(): String {
+    (
+      this.getClassName(),
+      this.head.map(l -> l.toString()).toArray(),
+      this.body.map(l -> l.toString()).toArray(),
+      this.foot.map(l -> l.toString()).toArray(),
     ).toString()
   }
 }
