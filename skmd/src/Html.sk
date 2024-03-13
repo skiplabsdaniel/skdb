@@ -258,9 +258,21 @@ fun convert(entities: Vector<Entity>): Vector<HTMLElement> {
           convert(subentities),
         ),
       )
-    | Table(size, header, body, foot, _, _) ->
+    | Table(size, head, body, foot, _, _) ->
       elements.push(
-        HTMLElement("table", Map[], convertTable(size, header, body, foot)),
+        HTMLElement(
+          "table",
+          Map["md-kind" => JSON.String("multiple")],
+          convertTable(size, head, body, foot),
+        ),
+      )
+    | SimpleTable(_, size, head, body) ->
+      elements.push(
+        HTMLElement(
+          "table",
+          Map["md-kind" => JSON.String("simple")],
+          convertSimpleTable(size, head, body),
+        ),
       )
     };
     !idx = idx + 1;
@@ -304,6 +316,56 @@ fun convertRow(
     | Some(cell) ->
       elements.push(
         HTMLElement(if (head) "th" else "td", Map[], convert(cell.entities)),
+      )
+    | _ ->
+      elements.push(
+        HTMLElement(
+          if (head) "th" else "td",
+          Map[],
+          Vector[HTMLHtml("&nbsp;")],
+        ),
+      )
+    }
+  };
+  elements.chill()
+}
+
+fun convertSimpleTable(
+  size: Int,
+  head: Vector<Accessor>,
+  body: Vector<Vector<Accessor>>,
+): Vector<HTMLElement> {
+  elements = mutable Vector<HTMLElement>[];
+  elements.push(
+    HTMLElement("thead", Map[], convertSimpleRow(size, head, true)),
+  );
+  elements.push(HTMLElement("tbody", Map[], convertSimpleRows(size, body)));
+  elements.chill()
+}
+
+fun convertSimpleRows(
+  size: Int,
+  rows: Vector<Vector<Accessor>>,
+  head: Bool = false,
+): Vector<HTMLElement> {
+  rows.map(row -> HTMLElement("tr", Map[], convertSimpleRow(size, row, head)))
+}
+
+fun convertSimpleRow(
+  size: Int,
+  row: Vector<Accessor>,
+  head: Bool,
+): Vector<HTMLElement> {
+  elements = mutable Vector<HTMLElement>[];
+  for (i in Range(0, size)) {
+    row.maybeGet(i) match {
+    | Some(cell) ->
+      elements.push(
+        HTMLElement(
+          if (head) "th" else "td",
+          Map[],
+          Vector[HTMLText(splitAccessor(cell))],
+        ),
       )
     | _ ->
       elements.push(
