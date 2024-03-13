@@ -5,7 +5,7 @@ class Accessor(
   maybeGetter: Int ~> ?Char,
   range: Range,
   first: Bool = false,
-) {
+) uses Show {
   //
   static fun empty(): this {
     Accessor(_ ~> '\0', _ ~> None(), Range(0, 0))
@@ -243,7 +243,7 @@ mutable base class BlockEntity extends Entity {
   //          Some(false) if the block shall stop and the line is not consumed
   //          Some(true) if the block shall stop and the line is consumed
   mutable fun check(line: Accessor): ?Bool;
-  readonly fun close(): this;
+  readonly fun close(): BlockEntity;
 }
 
 base class ListKind uses Equality, HasClassName, Show {
@@ -373,6 +373,8 @@ const blocks: Array<Accessor ~> ?mutable BlockEntity> = Array[
   CodeBlock::create,
   BlockQuote::create,
   DivBlock::create,
+  Table::create,
+  SimpleTable::create,
 ];
 
 mutable base class MainBlock(
@@ -656,8 +658,24 @@ mutable class CellBlock extends MainBlock uses Show {
   }
 }
 
+fun toRow(line: Accessor): Vector<Accessor> {
+  row = mutable Vector[];
+  index = 1;
+  start = index;
+  while (index < line.size()) {
+    line.get(index) match {
+    | '|' ->
+      row.push(line.slice(start, index));
+      !start = index + 1
+    | _ -> void
+    };
+    !index = index + 1;
+  };
+  row.chill()
+}
+
 mutable class Table(
-  size: Int = 0,
+  size: Int,
   head: mutable Vector<Vector<CellBlock>> = mutable Vector[],
   body: mutable Vector<Vector<CellBlock>> = mutable Vector[],
   foot: mutable Vector<Vector<CellBlock>> = mutable Vector[],
@@ -707,20 +725,7 @@ mutable class Table(
       return Some(true)
     };
     line.maybeGet(0) match {
-    | Some('|') ->
-      row = mutable Vector[];
-      index = 1;
-      start = index;
-      while (index < line.size()) {
-        line.get(index) match {
-        | '|' ->
-          row.push(line.slice(start, index));
-          !start = index + 1
-        | _ -> void
-        };
-        !index = index + 1;
-      };
-      this.rows.push(row.chill())
+    | Some('|') -> this.rows.push(toRow(line))
     | Some('+') ->
       if (
         line.all(c ~>
@@ -772,6 +777,76 @@ mutable class Table(
       this.head.map(l -> l.toString()).toArray(),
       this.body.map(l -> l.toString()).toArray(),
       this.foot.map(l -> l.toString()).toArray(),
+    ).toString()
+  }
+}
+
+mutable class SimpleTable(
+  lines: mutable Vector<Accessor> = mutable Vector[],
+  mutable size: Int = 0,
+  mutable head: Vector<Accessor> = Vector[],
+  body: mutable Vector<Vector<Accessor>> = mutable Vector[],
+) extends BlockEntity {
+  //
+  static fun create(line: Accessor): ?mutable this {
+    // | bla | blabla | ... |
+    if (line.maybeGet(0) != Some('|')) {
+      return None();
+    };
+    Some(mutable SimpleTable(mutable Vector<>[line]))
+  }
+
+  mutable fun check(line: Accessor): ?Bool {
+    if (line.isEmpty()) {
+      return Some(true)
+    };
+    if (line.maybeGet(0) != Some('|')) {
+      return Some(false)
+    };
+    if (this.size == 0 && line.size() == 1) {
+      // |-|-|-|-|
+      count = 0;
+      size = 0;
+      isarray = for (i in Range(1, line.size())) {
+        line.get(i) match {
+        | '-' if (count > 0) -> !count = count + 1
+        | '|' if (count > 0) ->
+          !count = 0;
+          !size = size + 1
+        | c if (Chars.isWhitespace(c)) -> void
+        | '|' | _ -> break false
+        }
+      } else {
+        true
+      };
+      if (size > 0 && isarray) {
+        this.!size = size;
+        this.!head = toRow(this.lines[0]);
+        this.lines.clear();
+      } else {
+        this.lines.push(line);
+      }
+    } else if (this.size > 0) {
+      this.body.push(toRow(line))
+    } else {
+      this.lines.push(line)
+    };
+    None()
+  }
+
+  readonly fun close(): BlockEntity {
+    if (this.size > 0) {
+      SimpleTable(Vector[], this.size, this.head.chill(), this.body.chill())
+    } else {
+      ParagraphBlock(this.lines.chill())
+    }
+  }
+
+  readonly fun toString(): String {
+    (
+      this.getClassName(),
+      this.head.map(l -> l.toString()).toArray(),
+      this.body.map(l -> l.toString()).toArray(),
     ).toString()
   }
 }
