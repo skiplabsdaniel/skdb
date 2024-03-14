@@ -10,7 +10,7 @@ fun readTextFile(filename: String): String {
   }
 }
 
-class Config{
+class HTMLConfig{
   title: ?String = None(),
   description: ?String = None(),
   icon: ?String = None(),
@@ -24,7 +24,7 @@ class Config{
   tableOfContent: Int = -1,
 } {
   //
-  static fun fromJSON(jsv: JSON.Value): Config {
+  static fun fromJSON(jsv: JSON.Value): HTMLConfig {
     jso = jsv.expectObject();
     getVector = name ->
       jso
@@ -98,13 +98,13 @@ class Config{
 fun convertToHtml{
   markdown: String,
   buffer: mutable Vector<String>,
-  conf: Config,
+  conf: HTMLConfig,
 }: void {
   entities = parseToBlocks(markdown);
   body_content = convert(entities);
   elements = mutable Vector<HTMLEntity>[];
   conf.fill(elements);
-  sublinks = toMenu(entities, conf.tableOfContent, 0);
+  sublinks = toHtmlMenu(toMenu(entities), conf.tableOfContent, 0);
   tableOfContent = if (!sublinks.isEmpty()) {
     Vector[
       HTMLElement(
@@ -483,7 +483,6 @@ fun toText(elements: Array<TextElement>): String {
   elements.map(textElementToHtml).join("");
 }
 
-// TODO: fill html element
 fun textElementToHtml(elem: TextElement): String {
   elem match {
   | TELink(ltext, link, optTitle) ->
@@ -537,44 +536,38 @@ fun textElementToHtml(elem: TextElement): String {
   }
 }
 
-fun toMenu(entities: Vector<Entity>, max: Int, depth: Int): Vector<HTMLEntity> {
+fun toHtmlMenu(menus: Array<Menu>, max: Int, depth: Int): Vector<HTMLEntity> {
   if (max == depth) {
     return Vector[];
   };
   items = mutable Vector<HTMLEntity>[];
-  entities.each(entity ->
-    entity match {
-    | hb @ HeaderBlock _ ->
-      hb.getId().each(id -> {
-        title = hb.getTitle().map(l -> HTMLText(splitAccessor(l)));
-        sublinks = toMenu(hb.entities, max, depth + 1);
-        children_ = if (!sublinks.isEmpty()) {
-          Vector[
-            HTMLElement(
-              "ul",
-              Map[
-                "class" => JSON.String("tableOfContent"),
-                "md-depth" => JSON.String(depth.toString()),
-              ],
-              sublinks,
-            ),
-          ]
-        } else {
-          Vector[]
-        };
-        items.push(
-          HTMLElement(
-            "li",
-            Map[],
-            Vector[
-              HTMLElement("a", Map["href" => JSON.String(`#${id}`)], title),
-            ].concat(children_),
-          ),
-        )
-      })
-    | _ -> void
-    }
-  );
+  menus.each(menu -> {
+    title = menu.title.map(l -> HTMLText(splitAccessor(l)));
+    sublinks = toHtmlMenu(menu.items, max, depth + 1);
+    children_ = if (!sublinks.isEmpty()) {
+      Vector[
+        HTMLElement(
+          "ul",
+          Map[
+            "class" => JSON.String("tableOfContent"),
+            "md-depth" => JSON.String(depth.toString()),
+          ],
+          sublinks,
+        ),
+      ]
+    } else {
+      Vector[]
+    };
+    items.push(
+      HTMLElement(
+        "li",
+        Map[],
+        Vector[
+          HTMLElement("a", Map["href" => JSON.String(`#${menu.id}`)], title),
+        ].concat(children_),
+      ),
+    )
+  });
   items.chill();
 }
 
