@@ -866,4 +866,22 @@ fun toEncoded(text: Sequence<Char>): String {
   String::fromChars(tmp.toArray())
 }
 
+class Menu(id: String, title: Vector<Accessor>, items: Array<Menu>)
+
+fun toMenu(entities: Vector<Entity>): Array<Menu> {
+  items = mutable Vector<Menu>[];
+  entities.each(entity ->
+    entity match {
+    | hb @ HeaderBlock _ ->
+      hb.getId().each(id -> {
+        title = hb.getTitle();
+        sublinks = toMenu(hb.entities);
+        items.push(Menu(id, title, sublinks))
+      })
+    | _ -> void
+    }
+  );
+  items.toArray();
+}
+
 module end;
