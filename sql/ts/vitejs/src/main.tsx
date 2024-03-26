@@ -10,15 +10,20 @@ createSkdb({ asWorker: true })
         fetch("/api/succeed")
           .then((res) => res.text())
           .then((text) => (document.getElementById("root")!.innerHTML = text));
+        document.title = "Endpoint reached.";
       })
       .catch((_err) => {
         fetch("/api/creationfailed")
           .then((res) => res.text())
           .then((text) => (document.getElementById("root")!.innerHTML = text));
+        document.title = "Endpoint reached.";
       });
   })
-  .catch((_err) =>
+  .catch((_err) => {
     fetch("/api/loadfailed")
       .then((res) => res.text())
-      .then((text) => (document.getElementById("root")!.innerHTML = text)),
+      .then((text) => (document.getElementById("root")!.innerHTML = text));
+
+    document.title = "Endpoint reached.";
+  }
   );
