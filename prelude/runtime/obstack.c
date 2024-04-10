@@ -37,6 +37,11 @@
 // head: The current position in the page.
 // end: The end of the page.
 
+typedef struct {
+  uint64_t size;
+  uint64_t max;
+} sk_obstack_info_t;
+
 #ifdef SKIP32
 
 // In 32bits mode there are no threads, so the obstack does not have to be
@@ -50,12 +55,25 @@ struct sk_obstack* free_list = NULL;
 
 unsigned char* decr_heap_end(size_t size);
 void reset_heap_end();
+uint64_t heap_end_diff();
 
 #else
 
 __thread struct sk_obstack* page = NULL;
 __thread char* head = NULL;
 __thread char* end = NULL;
+__thread sk_obstack_info_t info = {0};
+
+void incr_size(size_t size) {
+  info.size += size;
+  if (info.size > info.max) {
+    info.max = info.size;
+  }
+}
+
+void decr_size(size_t size) {
+  info.size -= size;
+}
 
 #endif
 
@@ -90,6 +108,14 @@ __thread sk_saved_obstack_t init_saved = {NULL, NULL, NULL};
 __thread sk_trace_t trace = {};
 #endif
 
+uint64_t SKIP_obstack_peak() {
+#ifdef SKIP32
+  return heap_end_diff();
+#else
+  return info.max;
+#endif
+}
+
 size_t sk_page_size(sk_obstack_t* page) {
   return page->size;
 }
@@ -107,6 +133,7 @@ void sk_free_page(sk_obstack_t* page) {
     free_list = page;
   }
 #else
+  decr_size(page->size);
   sk_free_size(page, page->size);
 #endif
 }
@@ -120,6 +147,7 @@ sk_obstack_t* sk_malloc_page(size_t block_size) {
   }
   return (sk_obstack_t*)decr_heap_end(block_size);
 #else
+  incr_size(block_size);
   return (sk_obstack_t*)sk_malloc(block_size);
 #endif
 }
@@ -134,6 +162,9 @@ void sk_obstack_attach_page(sk_obstack_t* lpage, sk_obstack_t* next) {
 
 char* sk_large_page(size_t size) {
   size_t block_size = size + sizeof(sk_obstack_t);
+#ifdef SKIP64
+  incr_size(block_size);
+#endif
   // SKIP32
   // large pages are create directly on persistence side memory
   // to prevent persistence copy
@@ -279,6 +310,20 @@ sk_saved_obstack_t* SKIP_new_Obstack() {
   sk_new_page();
 
   return saved;
+}
+
+uint64_t SKIP_Obstack_size(sk_saved_obstack_t* saved) {
+  sk_obstack_t* saved_page = NULL;
+  if (saved != NULL) {
+    saved_page = saved->page;
+  }
+  uint64_t size = 0;
+  sk_obstack_t* current = page;
+  while (current != NULL && current != saved_page) {
+    size += current->size;
+    current = current->previous;
+  }
+  return size;
 }
 
 void SKIP_destroy_Obstack(sk_saved_obstack_t* saved) {
