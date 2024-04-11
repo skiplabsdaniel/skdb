@@ -10,6 +10,7 @@ SKDB_WASM=sql/target/wasm32-unknown-unknown/$(SKARGO_PROFILE)/skdb.wasm
 SKDB_BIN=sql/target/host/$(SKARGO_PROFILE)/skdb
 SKNPM_BIN=sknpm/target/host/$(SKARGO_PROFILE)/sknpm
 SDKMAN_DIR?=$(HOME)/.sdkman
+SKDB_METRICS?=$(shell realpath ./sql/monitoring/metrics.json)
 
 ifndef PLAYWRIGHT_JUNIT_OUTPUT_NAME
 SKNPM_FLAG=
@@ -204,3 +205,13 @@ test-bun: npm
 	rm -r build/bun/node_modules/skdb
 	cp -r build/package/skdb build/bun/node_modules/
 	cd build/bun && bun bun.js true && bun bun.js false
+
+.PHONY: collect
+collect: $(SDKMAN_DIR)
+	bash -c 'source $(HOME)/.sdkman/bin/sdkman-init.sh && cd skmonitor/kotlin && gradle --console plain run --args $(SKDB_METRICS)' &
+
+.PHONY: stop-collecting
+stop-collecting:
+	echo "exit" >> /tmp/skmonitor.trace
+
+
