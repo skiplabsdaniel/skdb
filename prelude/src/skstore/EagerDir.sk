@@ -694,6 +694,8 @@ class EagerDir{
   reducer: ?Reducer = None(),
   purgeCount: Int = 0,
   tombLimit: ?Tick = None(),
+  copies: SortedMap<DirName, Bool> = SortedMap[],
+  created: SortedSet<DirName> = SortedSet[],
 } extends Dir {
   fun reset(
     context: mutable SKStore.Context,
@@ -2183,6 +2185,10 @@ class EagerDir{
 
   fun size(context: mutable Context): Int {
     context.addDep(Path::create(this.dirName.size(), SizeTag()));
+    this.totalSize
+  }
+
+  fun unsafeSize(): Int {
     this.totalSize
   }
 

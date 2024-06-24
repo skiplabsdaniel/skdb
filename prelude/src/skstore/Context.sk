@@ -313,7 +313,7 @@ mutable class Context{
   mutable deps: Deps = Deps[],
   mutable debugMode: Bool = debugMode,
   mutable failOnExn: Bool = true,
-  mutable hasPre: SortedSet<DirName> = SortedSet[],
+  mutable hasCopy: SortedSet<DirName> = SortedSet[],
   mutable newDirs: SortedSet<DirName> = SortedSet[],
   mutable toReset: SortedSet<DirName> = SortedSet[],
   mutable globals: SortedMap<String, File> = SortedMap[],
@@ -412,7 +412,7 @@ mutable class Context{
       deps => this.deps,
       debugMode => this.debugMode,
       failOnExn => this.failOnExn,
-      hasPre => this.hasPre,
+      hasCopy => this.hasCopy,
       newDirs => this.newDirs,
       toReset => this.toReset,
       globals => this.globals,
@@ -449,7 +449,7 @@ mutable class Context{
       deps => this.deps,
       debugMode => this.debugMode,
       failOnExn => this.failOnExn,
-      hasPre => this.hasPre,
+      hasCopy => this.hasCopy,
       newDirs => this.newDirs,
       toReset => this.toReset,
       globals => this.globals,
@@ -486,7 +486,7 @@ mutable class Context{
       deps => ctx.deps,
       debugMode => ctx.debugMode,
       failOnExn => ctx.failOnExn,
-      hasPre => ctx.hasPre,
+      hasCopy => ctx.hasCopy,
       newDirs => ctx.newDirs,
       toReset => ctx.toReset,
       globals => ctx.globals,
@@ -522,7 +522,7 @@ mutable class Context{
     this.!deps = ctx.deps;
     this.!debugMode = ctx.debugMode;
     this.!failOnExn = ctx.failOnExn;
-    this.!hasPre = ctx.hasPre;
+    this.!hasCopy = ctx.hasCopy;
     this.!newDirs = ctx.newDirs;
     this.!toReset = ctx.toReset;
     this.!globals = ctx.globals;
@@ -609,44 +609,63 @@ mutable class Context{
       print_string(`------------ UPDATE PRE ------------`);
     };
     withChange = false;
-    this.hasPre.each(dirName -> {
-      preDirName = dirName.pre();
+    this.hasCopy.each(dirName -> {
       this.unsafeMaybeGetEagerDir(dirName).each(dir -> {
-        this.unsafeMaybeGetEagerDir(preDirName) match {
-        | None() ->
-          this.!newDirs = this.newDirs.add(preDirName);
-          time = this.timeStamp();
-          preDir = EagerDir{
-            time,
-            input => false,
-            dirName => preDirName,
-            totalSize => 0,
-            fixedData => FixedDataMap::create(),
-            creator => this.currentArrow(),
-          };
-          dir.unsafeIterKeys((key, _time) -> {
-            values = dir.getArrayRaw(key).collect(Array);
-            !withChange = true;
-            source = Path::create(preDir.dirName, key);
-            !preDir = preDir.writeEntry(this, source, source, key, values);
-          });
-          this.setDir(preDir.dirName, preDir);
-          updateDirtyReaders(this, Path::create(preDirName.tag(), DirTag()));
-          this.setDir(preDirName, preDir)
-        | Some(preDir) ->
-          (isReset, changes) = dir.getChangesAfter(this.tick.prev());
-          for (key in changes) {
-            values = dir.getArrayRaw(key).collect(Array);
-            !withChange = true;
-            source = Path::create(preDir.dirName, key);
-            !preDir = preDir.writeEntry(this, source, source, key, values);
-          };
-          if (isReset) {
-            writerPath = Path(preDir.dirName, IID(genSym(0)));
-            !preDir = preDir.reset(this, writerPath, changes);
-          };
-          this.setDir(preDir.dirName, preDir)
-        }
+        created = false;
+        dir.copies.each((copyName, autoremove) -> {
+          this.unsafeMaybeGetEagerDir(copyName) match {
+          | None() ->
+            if (autoremove) {
+              !created = true;
+              !dir.created = dir.created.add(copyName);
+            };
+            this.!newDirs = this.newDirs.add(copyName);
+            time = this.timeStamp();
+            copiedDir = EagerDir{
+              time,
+              input => false,
+              dirName => copyName,
+              totalSize => 0,
+              fixedData => FixedDataMap::create(),
+              creator => this.currentArrow(),
+            };
+            dir.unsafeIterKeys((key, _time) -> {
+              values = dir.getArrayRaw(key).collect(Array);
+              !withChange = true;
+              source = Path::create(copiedDir.dirName, key);
+              !copiedDir = copiedDir.writeEntry(
+                this,
+                source,
+                source,
+                key,
+                values,
+              );
+            });
+            this.setDir(copiedDir.dirName, copiedDir);
+            updateDirtyReaders(this, Path::create(copyName.tag(), DirTag()));
+            this.setDir(copyName, copiedDir)
+          | Some(copiedDir) ->
+            (isReset, changes) = dir.getChangesAfter(this.tick.prev());
+            for (key in changes) {
+              values = dir.getArrayRaw(key).collect(Array);
+              !withChange = true;
+              source = Path::create(copiedDir.dirName, key);
+              !copiedDir = copiedDir.writeEntry(
+                this,
+                source,
+                source,
+                key,
+                values,
+              );
+            };
+            if (isReset) {
+              writerPath = Path(copiedDir.dirName, IID(genSym(0)));
+              !copiedDir = copiedDir.reset(this, writerPath, changes);
+            };
+            this.setDir(copiedDir.dirName, copiedDir)
+          }
+        });
+        if (created) this.setDir(dirName, dir)
       })
     });
     withChange
@@ -1083,8 +1102,8 @@ mutable class Context{
     if (this.debugMode) {
       print_string("REMOVED: " + dirName);
     };
-    if (this.hasPre.contains(dirName)) {
-      this.!hasPre = this.hasPre.remove(dirName);
+    if (this.hasCopy.contains(dirName)) {
+      this.!hasCopy = this.hasCopy.remove(dirName);
     };
     this.unsafeMaybeGetEagerDir(dirName) match {
     | None() -> return void
@@ -1096,7 +1115,8 @@ mutable class Context{
           !parent.childDirs = parent.childDirs.remove(dirName);
           this.setDir(parent.dirName, parent)
         }
-      }
+      };
+      dir.created.each(this.removeDir)
     };
     this.!deps = this.deps.removeDir(dirName);
     this.!dirsWithSharedSubDirs = this.dirsWithSharedSubDirs.remove(dirName);
