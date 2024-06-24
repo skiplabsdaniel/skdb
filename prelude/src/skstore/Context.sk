@@ -22,6 +22,11 @@ base class CmdKind {
   | NUpdates(String)
   | NNotify(String)
   | NTail()
+  | NWatch(
+    start: Tick,
+    (DirName, Array<(Key, Tick, Array<File>)>) ~> void,
+    ?(DirName, Array<(Key, Array<File>)>, Array<Key>, Tick) ~> void,
+  )
 }
 
 value class Sub(
@@ -369,7 +374,6 @@ mutable class Context{
   }
 
   mutable fun subscribe(
-    context: mutable Context,
     sessionId: Int,
     init: Bool,
     cmd: CmdKind,
@@ -382,7 +386,11 @@ mutable class Context{
       this.notifySub(sub, Tick(0))
     };
 
-    context.!sessions[sessionId] = sub;
+    this.!sessions[sessionId] = sub;
+  }
+
+  mutable fun unsubscribe(sessionId: Int): void {
+    this.!sessions = this.sessions.remove(sessionId)
   }
 
   mutable fun pushAsync(path: Path): void {
@@ -922,6 +930,41 @@ mutable class Context{
     | NTail() ->
       cond = unfreezeCond(sub.cond);
       _ = condBroadcast(cond)
+    | NWatch(initTick, fn, optChanges) ->
+      for (dirSub in sub.dirSubs) {
+        dirName = dirSub.dirName;
+        this.unsafeMaybeGetDir(dirName) match {
+        | Some(dir @ EagerDir _) ->
+          (init, changedKeys) = if (optChanges.isSome() && start > initTick) {
+            dir.getChangesAfter(start)
+          } else {
+            (true, SortedSet[])
+          };
+          if (init) {
+            result = mutable Vector[];
+            dir.unsafeIterKeys((key, time) -> {
+              values = dir.getArrayRaw(key);
+              result.push((key, time, values))
+            });
+            fn(dirName, result.toArray())
+          } else {
+            optChanges.each(changesFn -> {
+              added = mutable Vector[];
+              removed = mutable Vector[];
+              for (key in changedKeys) {
+                values = dir.getArrayRaw(key);
+                if (values.size() == 0) {
+                  removed.push(key)
+                } else {
+                  added.push((key, values));
+                };
+              };
+              changesFn(dirName, added.toArray(), removed.toArray(), this.tick)
+            })
+          }
+        | _ -> void
+        }
+      }
     };
     mutexUnlock(lock)
   }

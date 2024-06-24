@@ -649,7 +649,6 @@ fun getSubsDirs(
       });
 
       context.subscribe(
-        context,
         request.sessionID,
         request.init,
         request.cmd,
