@@ -318,11 +318,11 @@ mutable class Context{
   mutable deps: Deps = Deps[],
   mutable debugMode: Bool = debugMode,
   mutable failOnExn: Bool = true,
+  mutable hasPre: SortedSet<DirName> = SortedSet[],
   mutable hasCopy: SortedSet<DirName> = SortedSet[],
   mutable newDirs: SortedSet<DirName> = SortedSet[],
   mutable toReset: SortedSet<DirName> = SortedSet[],
   mutable globals: SortedMap<String, File> = SortedMap[],
-  mutable asyncList: List<Path> = List[],
   mutable dirty: List<Path> = List[],
   mutable dirtyReaders: List<ArrowKey> = List[],
   mutable canReuse: CanReuse = CRIfMatch(),
@@ -420,6 +420,7 @@ mutable class Context{
       deps => this.deps,
       debugMode => this.debugMode,
       failOnExn => this.failOnExn,
+      hasPre => this.hasPre,
       hasCopy => this.hasCopy,
       newDirs => this.newDirs,
       toReset => this.toReset,
@@ -457,6 +458,7 @@ mutable class Context{
       deps => this.deps,
       debugMode => this.debugMode,
       failOnExn => this.failOnExn,
+      hasPre => this.hasPre,
       hasCopy => this.hasCopy,
       newDirs => this.newDirs,
       toReset => this.toReset,
@@ -494,6 +496,7 @@ mutable class Context{
       deps => ctx.deps,
       debugMode => ctx.debugMode,
       failOnExn => ctx.failOnExn,
+      hasPre => ctx.hasPre,
       hasCopy => ctx.hasCopy,
       newDirs => ctx.newDirs,
       toReset => ctx.toReset,
@@ -530,6 +533,7 @@ mutable class Context{
     this.!deps = ctx.deps;
     this.!debugMode = ctx.debugMode;
     this.!failOnExn = ctx.failOnExn;
+    this.!hasPre = ctx.hasPre;
     this.!hasCopy = ctx.hasCopy;
     this.!newDirs = ctx.newDirs;
     this.!toReset = ctx.toReset;
@@ -612,96 +616,126 @@ mutable class Context{
     _ = this.updatePre();
   }
 
+  mutable fun checkCopy(
+    dir: EagerDir,
+    copyName: DirName,
+    autoremove: Bool,
+  ): (EagerDir, Bool, Bool) {
+    created = false;
+    withChange = false;
+    this.unsafeMaybeGetEagerDir(copyName) match {
+    | None() ->
+      if (autoremove) {
+        !created = true;
+        !dir.created = dir.created.add(copyName);
+      };
+      this.!newDirs = this.newDirs.add(copyName);
+      time = this.timeStamp();
+      copiedDir = EagerDir{
+        time,
+        input => false,
+        dirName => copyName,
+        totalSize => 0,
+        fixedData => FixedDataMap::create(),
+        creator => this.currentArrow(),
+      };
+      dir.unsafeIterKeys((key, _time) -> {
+        values = dir.getArrayRaw(key).collect(Array);
+        !withChange = true;
+        source = Path::create(copiedDir.dirName, key);
+        !copiedDir = copiedDir.writeEntry(this, source, source, key, values);
+      });
+      this.setDir(copiedDir.dirName, copiedDir);
+      updateDirtyReaders(this, Path::create(copyName.tag(), DirTag()));
+      this.setDir(copyName, copiedDir)
+    | Some(copiedDir) ->
+      (isReset, changes) = dir.getChangesAfter(this.tick.prev());
+      for (key in changes) {
+        values = dir.getArrayRaw(key).collect(Array);
+        !withChange = true;
+        source = Path::create(copiedDir.dirName, key);
+        !copiedDir = copiedDir.writeEntry(this, source, source, key, values);
+      };
+      if (isReset) {
+        writerPath = Path(copiedDir.dirName, IID(genSym(0)));
+        !copiedDir = copiedDir.reset(this, writerPath, changes);
+      };
+      this.setDir(copiedDir.dirName, copiedDir)
+    };
+    (dir, created, withChange)
+  }
+
+  mutable fun checkDeleted(dir: DeletedDir, copyName: DirName): Bool {
+    withChange = false;
+    this.unsafeMaybeGetEagerDir(copyName).each(copiedDir -> {
+      for (key in dir.deletedKeys) {
+        !withChange = true;
+        source = Path::create(copiedDir.dirName, key);
+        !copiedDir = copiedDir.writeEntry(this, source, source, key, Array[]);
+      };
+      this.setDir(copiedDir.dirName, copiedDir)
+    });
+    withChange
+  }
+
   mutable fun updatePre(): Bool {
     if (this.debugMode) {
       print_string(`------------ UPDATE PRE ------------`);
     };
     withChange = false;
+    toClean = SortedSet<DirName>[];
     this.hasCopy.each(dirName -> {
       this.unsafeMaybeGetDir(dirName) match {
       | Some(dir @ DeletedDir _) ->
-        dir.copies.each((copyName, _) -> {
-          this.unsafeMaybeGetEagerDir(copyName).each(copiedDir -> {
-            for (key in dir.deletedKeys) {
-              !withChange = true;
-              source = Path::create(copiedDir.dirName, key);
-              !copiedDir = copiedDir.writeEntry(
-                this,
-                source,
-                source,
-                key,
-                Array[],
-              );
-            };
-            this.setDir(copiedDir.dirName, copiedDir)
-          })
-        });
+        if (!dir.deletedKeys.isEmpty()) {
+          dir.copies.each((copyName, _) -> {
+            if (this.checkDeleted(dir, copyName)) !withChange = true;
+          });
+          !toClean = toClean.set(dir.dirName);
+        };
         // clean hasCopy
         this.!hasCopy = this.hasCopy.remove(dirName);
         // clean copies
         !dir.copies = SortedMap[];
-        !dir.deletedKeys = SortedSet[];
         this.setDir(dirName, dir)
       | Some(dir @ EagerDir _) ->
         created = false;
         dir.copies.each((copyName, autoremove) -> {
-          this.unsafeMaybeGetEagerDir(copyName) match {
-          | None() ->
-            if (autoremove) {
-              !created = true;
-              !dir.created = dir.created.add(copyName);
-            };
-            this.!newDirs = this.newDirs.add(copyName);
-            time = this.timeStamp();
-            copiedDir = EagerDir{
-              time,
-              input => false,
-              dirName => copyName,
-              totalSize => 0,
-              fixedData => FixedDataMap::create(),
-              creator => this.currentArrow(),
-            };
-            dir.unsafeIterKeys((key, _time) -> {
-              values = dir.getArrayRaw(key).collect(Array);
-              !withChange = true;
-              source = Path::create(copiedDir.dirName, key);
-              !copiedDir = copiedDir.writeEntry(
-                this,
-                source,
-                source,
-                key,
-                values,
-              );
-            });
-            this.setDir(copiedDir.dirName, copiedDir);
-            updateDirtyReaders(this, Path::create(copyName.tag(), DirTag()));
-            this.setDir(copyName, copiedDir)
-          | Some(copiedDir) ->
-            (isReset, changes) = dir.getChangesAfter(this.tick.prev());
-            for (key in changes) {
-              values = dir.getArrayRaw(key).collect(Array);
-              !withChange = true;
-              source = Path::create(copiedDir.dirName, key);
-              !copiedDir = copiedDir.writeEntry(
-                this,
-                source,
-                source,
-                key,
-                values,
-              );
-            };
-            if (isReset) {
-              writerPath = Path(copiedDir.dirName, IID(genSym(0)));
-              !copiedDir = copiedDir.reset(this, writerPath, changes);
-            };
-            this.setDir(copiedDir.dirName, copiedDir)
-          }
+          (!dir, !created, changes) = this.checkCopy(dir, copyName, autoremove);
+          if (changes) !withChange = true;
         });
         if (created) this.setDir(dirName, dir)
       | _ ->
         invariant_violation("unsafeMaybeGetEagerDir: Was expecting EagerDir")
       }
     });
+    this.hasPre.each(dirName -> {
+      this.unsafeMaybeGetDir(dirName) match {
+      | Some(dir @ DeletedDir _) ->
+        preName = dirName.pre();
+        if (!dir.deletedKeys.isEmpty()) {
+          if (this.checkDeleted(dir, preName)) !withChange = true;
+          !toClean = toClean.set(dir.dirName);
+        };
+        // clean hasPre
+        this.!hasPre = this.hasPre.remove(dirName);
+        this.setDir(dirName, dir)
+      | Some(dir @ EagerDir _) ->
+        (!dir, created, changes) = this.checkCopy(dir, dirName.pre(), true);
+        if (changes) !withChange = true;
+        if (created) this.setDir(dirName, dir)
+      | _ ->
+        invariant_violation("unsafeMaybeGetEagerDir: Was expecting EagerDir")
+      }
+    });
+    toClean.each(dirName ->
+      this.unsafeMaybeGetDir(dirName) match {
+      | Some(dir @ DeletedDir _) ->
+        !dir.deletedKeys = SortedSet[];
+        this.setDir(dirName, dir)
+      | _ -> void
+      }
+    );
     withChange
   }
 
