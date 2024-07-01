@@ -618,7 +618,31 @@ mutable class Context{
     };
     withChange = false;
     this.hasCopy.each(dirName -> {
-      this.unsafeMaybeGetEagerDir(dirName).each(dir -> {
+      this.unsafeMaybeGetDir(dirName) match {
+      | Some(dir @ DeletedDir _) ->
+        dir.copies.each((copyName, _) -> {
+          this.unsafeMaybeGetEagerDir(copyName).each(copiedDir -> {
+            for (key in dir.deletedKeys) {
+              !withChange = true;
+              source = Path::create(copiedDir.dirName, key);
+              !copiedDir = copiedDir.writeEntry(
+                this,
+                source,
+                source,
+                key,
+                Array[],
+              );
+            };
+            this.setDir(copiedDir.dirName, copiedDir)
+          })
+        });
+        // clean hasCopy
+        this.!hasCopy = this.hasCopy.remove(dirName);
+        // clean copies
+        !dir.copies = SortedMap[];
+        !dir.deletedKeys = SortedSet[];
+        this.setDir(dirName, dir)
+      | Some(dir @ EagerDir _) ->
         created = false;
         dir.copies.each((copyName, autoremove) -> {
           this.unsafeMaybeGetEagerDir(copyName) match {
@@ -674,7 +698,9 @@ mutable class Context{
           }
         });
         if (created) this.setDir(dirName, dir)
-      })
+      | _ ->
+        invariant_violation("unsafeMaybeGetEagerDir: Was expecting EagerDir")
+      }
     });
     withChange
   }
@@ -750,14 +776,10 @@ mutable class Context{
   }
 
   mutable fun update(): void {
-    hasBackgroundWork = this.updateWithStatus(0);
-    if (hasBackgroundWork) {
-      invariant_violation(
-        "update should not be called when there is background work" +
-          "use updateWithStatus instead",
-      );
-    };
-    void
+    remainingChanges = true;
+    while (remainingChanges) {
+      !remainingChanges = this.updateWithStatus(0);
+    }
   }
 
   mutable fun updateWithStatus(backgroundRounds: Int): Bool {
@@ -1145,10 +1167,7 @@ mutable class Context{
     if (this.debugMode) {
       print_string("REMOVED: " + dirName);
     };
-    if (this.hasCopy.contains(dirName)) {
-      this.!hasCopy = this.hasCopy.remove(dirName);
-    };
-    this.unsafeMaybeGetEagerDir(dirName) match {
+    (deletedKeys, copies) = this.unsafeMaybeGetEagerDir(dirName) match {
     | None() -> return void
     | Some(dir) ->
       for (parentName => _ in dir.parents) {
@@ -1159,12 +1178,16 @@ mutable class Context{
           this.setDir(parent.dirName, parent)
         }
       };
-      dir.created.each(this.removeDir)
+      dir.created.each(this.removeDir);
+      (dir.keys(), dir.copies)
     };
     this.!deps = this.deps.removeDir(dirName);
     this.!dirsWithSharedSubDirs = this.dirsWithSharedSubDirs.remove(dirName);
     this.!sharedSubDirsRefCount = this.sharedSubDirsRefCount.remove(dirName);
-    this.setDir(dirName, DeletedDir{dirName, time => this.timeStamp()});
+    this.setDir(
+      dirName,
+      DeletedDir{dirName, time => this.timeStamp(), deletedKeys, copies},
+    );
   }
 
   mutable fun transitiveChildDirs(dirName: DirName): SortedSet<DirName> {
