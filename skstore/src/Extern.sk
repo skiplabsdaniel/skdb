@@ -485,9 +485,7 @@ fun update(): Float {
   if (SKStore.gHasContext() == 0) {
     return 0.0
   };
-  res = SKStore.runLockedWithResult(context ~>
-    _ = context.updateWithStatus(0)
-  ) match {
+  res = SKStore.runLockedWithResult(context ~> _ = context.update()) match {
   | Success _ -> 1.0
   | Failure(err) -> -getErrorHdl(err)
   };
@@ -604,7 +602,7 @@ fun createFor(session: String): Float {
       );
     };
     // Update is called to propagate outputs
-    _ = context.updateWithStatus(0);
+    _ = context.updateWithStatus();
   }) match {
   | Success _ -> 1.0
   | Failure(err) -> -getErrorHdl(err)

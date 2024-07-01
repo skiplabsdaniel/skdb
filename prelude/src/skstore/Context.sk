@@ -393,19 +393,6 @@ mutable class Context{
     this.!sessions = this.sessions.remove(sessionId)
   }
 
-  mutable fun pushAsync(path: Path): void {
-    this.!asyncList = List.Cons(path, this.asyncList);
-  }
-
-  mutable fun popAsync(): ?Path {
-    this.asyncList match {
-    | List.Nil() -> None()
-    | List.Cons(x, rl) ->
-      this.!asyncList = rl;
-      Some(x)
-    }
-  }
-
   readonly fun clone(): this {
     static{
       toPurge => this.toPurge,
@@ -425,7 +412,6 @@ mutable class Context{
       newDirs => this.newDirs,
       toReset => this.toReset,
       globals => this.globals,
-      asyncList => this.asyncList,
       dirty => this.dirty,
       dirtyReaders => this.dirtyReaders,
       canReuse => this.canReuse,
@@ -463,7 +449,6 @@ mutable class Context{
       newDirs => this.newDirs,
       toReset => this.toReset,
       globals => this.globals,
-      asyncList => this.asyncList,
       dirty => this.dirty,
       dirtyReaders => this.dirtyReaders,
       canReuse => this.canReuse,
@@ -501,7 +486,6 @@ mutable class Context{
       newDirs => ctx.newDirs,
       toReset => ctx.toReset,
       globals => ctx.globals,
-      asyncList => ctx.asyncList,
       dirty => ctx.dirty,
       dirtyReaders => ctx.dirtyReaders,
       canReuse => ctx.canReuse,
@@ -538,7 +522,6 @@ mutable class Context{
     this.!newDirs = ctx.newDirs;
     this.!toReset = ctx.toReset;
     this.!globals = ctx.globals;
-    this.!asyncList = ctx.asyncList;
     this.!dirty = ctx.dirty;
     this.!dirtyReaders = ctx.dirtyReaders;
     this.!canReuse = ctx.canReuse;
@@ -810,13 +793,13 @@ mutable class Context{
   }
 
   mutable fun update(): void {
-    remainingChanges = true;
-    while (remainingChanges) {
-      !remainingChanges = this.updateWithStatus(0);
+    withChanges = true;
+    while (withChanges) {
+      !withChanges = this.updateWithStatus();
     }
   }
 
-  mutable fun updateWithStatus(backgroundRounds: Int): Bool {
+  mutable fun updateWithStatus(): Bool {
     invariant(
       this.currentArrow().isNone(),
       "updateWithStatus cannot be called during update.",
@@ -828,29 +811,6 @@ mutable class Context{
     _ = this.timeStamp();
 
     this.updateLazyGets();
-
-    while (backgroundRounds > 0) {
-      roundsCopy = backgroundRounds;
-      !backgroundRounds = withRegion(this, (obstack, context) ~> {
-        rounds = roundsCopy;
-        while (rounds > 0) {
-          path = context.popAsync() match {
-          | None() ->
-            !rounds = 0;
-            break void
-          | Some(x) -> x
-          };
-          dir = context.unsafeGetLazyDir(path.dirName);
-          _ = dir.unsafeGetArray(context, path.baseName);
-          updateDirtyReaders(context, path, false);
-          !rounds = rounds - 1;
-          if (shouldGC(obstack) != 0) {
-            break void;
-          }
-        };
-        rounds
-      })
-    };
 
     dirty = mutable Map<DirName, SortedSet<Key>>[];
     dirtyReaders = mutable Map<DirName, mutable Map<DirName, SortedSet<Key>>>[];
@@ -885,7 +845,7 @@ mutable class Context{
         invariant(this.dirtyReaders.isEmpty());
         withPostWrites = this.checkPostWrites();
         withPre = this.updatePre();
-        withChanges = withPostWrites || withPre || !this.asyncList.isEmpty();
+        withChanges = withPostWrites || withPre;
         this.!toReset = SortedSet[];
         this.!tick = this.tick.next();
         break withChanges
