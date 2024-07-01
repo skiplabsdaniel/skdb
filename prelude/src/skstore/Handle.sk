@@ -539,28 +539,15 @@ class EHandle<K: Key, V: File>(
   fun copyTo(
     context: mutable Context,
     target: DirName,
-    autoremove: Bool = true,
-  ): ?EHandle<K, V> {
-    optHandle = context.maybeGetDir(target) match {
-    | Some(d @ EagerDir _) ->
-      // A copy target cannot be anymore used as input
-      if (d.input) {
-        !d.input = false;
-        context.setDir(d.getDirName(), d);
-      };
-      Some(EHandle(this.keyType, this.type, target))
-    | None() -> None()
-    | _ -> invariant_violation("copyTo: Copy target must be an input dir.")
-    };
-    dir = context.getEagerDir(this.dirName);
-    if (!context.hasCopy.contains(this.dirName)) {
-      context.!hasCopy = context.hasCopy.add(this.dirName);
-    };
-    if (!dir.copies.containsKey(target)) {
-      !dir.copies = dir.copies.add(target, autoremove);
-      context.setDir(this.dirName, dir);
-    };
-    optHandle;
+    convert: (mutable Context, K, Array<V>) ~> (Key, Array<File>),
+  ): void {
+    context.!copies = List.Cons(
+      Copy(this.getDirName(), target, (ctx, k, vs) ~> {
+        convKey = this.getKeyType();
+        convert(ctx, convKey(k), vs.map(this.getType()))
+      }),
+      context.copies,
+    );
   }
 
   fun pre(context: mutable Context): ?EHandle<K, V> {

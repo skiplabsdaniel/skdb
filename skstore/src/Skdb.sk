@@ -67,20 +67,15 @@ fun toTable(
   ) ~> SKJSON.CJSON,
 ): void {
   dirDescr = SKDB.getTable(context, 0, P.Name::create(table));
-  dirName = SKStore.subDirName(context, "outputs/" + table);
-  converted = handle.map(
-    SKDB.RowKey::keyType,
-    SKDB.RowValues::type,
-    context,
-    dirName,
-    (context, writer, key, it) ~> {
-      computed = conv(key, it);
-      rowValues = toRowValues(context, dirDescr, computed);
-      rowKey = SKDB.RowKey(rowValues, dirDescr.kinds);
-      writer.set(rowKey, rowValues)
-    },
-  );
-  _ = converted.copyTo(context, dirDescr.dirName, false)
+  handle.copyTo(context, dirDescr.dirName, (ctx, key, values) ~> {
+    computed = SKStore.FileIterator::create(values.iterator()) match {
+    | SKStore.EmptyIterator _ -> invariant_violation("Cannot be empty")
+    | iter @ SKStore.NonEmptyIterator _ -> conv(key, iter)
+    };
+    rowValues = toRowValues(ctx, dirDescr, computed);
+    rowKey = SKDB.RowKey(rowValues, dirDescr.kinds);
+    (rowKey, Array[rowValues])
+  })
 }
 
 fun decodeParams(input: SKJSON.CJObject): Map<String, P.Value> {

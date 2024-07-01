@@ -13,6 +13,14 @@ module SKStore;
 
 class ToWrite(DirName, Key, readonly Context ~> Array<File>)
 
+class Copy(
+  from: DirName,
+  to: DirName,
+  (mutable Context, Key, Array<File>) ~> (Key, Array<File>),
+  tick: ?Tick = None(),
+  keys: SortedMap<Key, Key> = SortedMap[],
+)
+
 /*****************************************************************************/
 /* Sessions. */
 /*****************************************************************************/
@@ -319,7 +327,7 @@ mutable class Context{
   mutable debugMode: Bool = debugMode,
   mutable failOnExn: Bool = true,
   mutable hasPre: SortedSet<DirName> = SortedSet[],
-  mutable hasCopy: SortedSet<DirName> = SortedSet[],
+  mutable copies: List<Copy> = List[],
   mutable newDirs: SortedSet<DirName> = SortedSet[],
   mutable toReset: SortedSet<DirName> = SortedSet[],
   mutable globals: SortedMap<String, File> = SortedMap[],
@@ -408,7 +416,7 @@ mutable class Context{
       debugMode => this.debugMode,
       failOnExn => this.failOnExn,
       hasPre => this.hasPre,
-      hasCopy => this.hasCopy,
+      copies => this.copies,
       newDirs => this.newDirs,
       toReset => this.toReset,
       globals => this.globals,
@@ -445,7 +453,7 @@ mutable class Context{
       debugMode => this.debugMode,
       failOnExn => this.failOnExn,
       hasPre => this.hasPre,
-      hasCopy => this.hasCopy,
+      copies => this.copies,
       newDirs => this.newDirs,
       toReset => this.toReset,
       globals => this.globals,
@@ -482,7 +490,7 @@ mutable class Context{
       debugMode => ctx.debugMode,
       failOnExn => ctx.failOnExn,
       hasPre => ctx.hasPre,
-      hasCopy => ctx.hasCopy,
+      copies => ctx.copies,
       newDirs => ctx.newDirs,
       toReset => ctx.toReset,
       globals => ctx.globals,
@@ -518,7 +526,7 @@ mutable class Context{
     this.!debugMode = ctx.debugMode;
     this.!failOnExn = ctx.failOnExn;
     this.!hasPre = ctx.hasPre;
-    this.!hasCopy = ctx.hasCopy;
+    this.!copies = ctx.copies;
     this.!newDirs = ctx.newDirs;
     this.!toReset = ctx.toReset;
     this.!globals = ctx.globals;
@@ -599,127 +607,140 @@ mutable class Context{
     _ = this.updatePre();
   }
 
-  mutable fun checkCopy(
-    dir: EagerDir,
-    copyName: DirName,
-    autoremove: Bool,
-  ): (EagerDir, Bool, Bool) {
-    created = false;
-    withChange = false;
-    this.unsafeMaybeGetEagerDir(copyName) match {
-    | None() ->
-      if (autoremove) {
-        !created = true;
-        !dir.created = dir.created.add(copyName);
-      };
-      this.!newDirs = this.newDirs.add(copyName);
-      time = this.timeStamp();
-      copiedDir = EagerDir{
-        time,
-        input => false,
-        dirName => copyName,
-        totalSize => 0,
-        fixedData => FixedDataMap::create(),
-        creator => this.currentArrow(),
-      };
-      dir.unsafeIterKeys((key, _time) -> {
-        values = dir.getArrayRaw(key).collect(Array);
-        !withChange = true;
-        source = Path::create(copiedDir.dirName, key);
-        !copiedDir = copiedDir.writeEntry(this, source, source, key, values);
-      });
-      this.setDir(copiedDir.dirName, copiedDir);
-      updateDirtyReaders(this, Path::create(copyName.tag(), DirTag()));
-      this.setDir(copyName, copiedDir)
-    | Some(copiedDir) ->
-      (isReset, changes) = dir.getChangesAfter(this.tick.prev());
-      for (key in changes) {
-        values = dir.getArrayRaw(key).collect(Array);
-        !withChange = true;
-        source = Path::create(copiedDir.dirName, key);
-        !copiedDir = copiedDir.writeEntry(this, source, source, key, values);
-      };
-      if (isReset) {
-        writerPath = Path(copiedDir.dirName, IID(genSym(0)));
-        !copiedDir = copiedDir.reset(this, writerPath, changes);
-      };
-      this.setDir(copiedDir.dirName, copiedDir)
-    };
-    (dir, created, withChange)
-  }
-
-  mutable fun checkDeleted(dir: DeletedDir, copyName: DirName): Bool {
-    withChange = false;
-    this.unsafeMaybeGetEagerDir(copyName).each(copiedDir -> {
-      for (key in dir.deletedKeys) {
-        !withChange = true;
-        source = Path::create(copiedDir.dirName, key);
-        !copiedDir = copiedDir.writeEntry(this, source, source, key, Array[]);
-      };
-      this.setDir(copiedDir.dirName, copiedDir)
-    });
-    withChange
-  }
-
   mutable fun updatePre(): Bool {
     if (this.debugMode) {
       print_string(`------------ UPDATE PRE ------------`);
     };
     withChange = false;
-    toClean = SortedSet<DirName>[];
-    this.hasCopy.each(dirName -> {
-      this.unsafeMaybeGetDir(dirName) match {
-      | Some(dir @ DeletedDir _) ->
-        if (!dir.deletedKeys.isEmpty()) {
-          dir.copies.each((copyName, _) -> {
-            if (this.checkDeleted(dir, copyName)) !withChange = true;
-          });
-          !toClean = toClean.set(dir.dirName);
-        };
-        // clean hasCopy
-        this.!hasCopy = this.hasCopy.remove(dirName);
-        // clean copies
-        !dir.copies = SortedMap[];
-        this.setDir(dirName, dir)
-      | Some(dir @ EagerDir _) ->
-        created = false;
-        dir.copies.each((copyName, autoremove) -> {
-          (!dir, !created, changes) = this.checkCopy(dir, copyName, autoremove);
-          if (changes) !withChange = true;
-        });
-        if (created) this.setDir(dirName, dir)
-      | _ ->
-        invariant_violation("unsafeMaybeGetEagerDir: Was expecting EagerDir")
-      }
-    });
     this.hasPre.each(dirName -> {
-      this.unsafeMaybeGetDir(dirName) match {
-      | Some(dir @ DeletedDir _) ->
-        preName = dirName.pre();
-        if (!dir.deletedKeys.isEmpty()) {
-          if (this.checkDeleted(dir, preName)) !withChange = true;
-          !toClean = toClean.set(dir.dirName);
-        };
-        // clean hasPre
-        this.!hasPre = this.hasPre.remove(dirName);
-        this.setDir(dirName, dir)
-      | Some(dir @ EagerDir _) ->
-        (!dir, created, changes) = this.checkCopy(dir, dirName.pre(), true);
-        if (changes) !withChange = true;
-        if (created) this.setDir(dirName, dir)
-      | _ ->
-        invariant_violation("unsafeMaybeGetEagerDir: Was expecting EagerDir")
-      }
+      preDirName = dirName.pre();
+      this.unsafeMaybeGetEagerDir(dirName).each(dir -> {
+        this.unsafeMaybeGetEagerDir(preDirName) match {
+        | None() ->
+          this.!newDirs = this.newDirs.add(preDirName);
+          time = this.timeStamp();
+          preDir = EagerDir{
+            time,
+            input => false,
+            dirName => preDirName,
+            totalSize => 0,
+            fixedData => FixedDataMap::create(),
+            creator => this.currentArrow(),
+          };
+          dir.unsafeIterKeys((key, _time) -> {
+            values = dir.getArrayRaw(key).collect(Array);
+            !withChange = true;
+            source = Path::create(preDir.dirName, key);
+            !preDir = preDir.writeEntry(this, source, source, key, values);
+          });
+          this.setDir(preDir.dirName, preDir);
+          updateDirtyReaders(this, Path::create(preDirName.tag(), DirTag()));
+          this.setDir(preDirName, preDir)
+        | Some(preDir) ->
+          (isReset, changes) = dir.getChangesAfter(this.tick.prev());
+          for (key in changes) {
+            values = dir.getArrayRaw(key).collect(Array);
+            !withChange = true;
+            source = Path::create(preDir.dirName, key);
+            !preDir = preDir.writeEntry(this, source, source, key, values);
+          };
+          if (isReset) {
+            writerPath = Path(preDir.dirName, IID(genSym(0)));
+            !preDir = preDir.reset(this, writerPath, changes);
+          };
+          this.setDir(preDir.dirName, preDir)
+        }
+      })
     });
-    toClean.each(dirName ->
-      this.unsafeMaybeGetDir(dirName) match {
-      | Some(dir @ DeletedDir _) ->
-        !dir.deletedKeys = SortedSet[];
-        this.setDir(dirName, dir)
+    withChange
+  }
+
+  mutable fun updateCopies(): Bool {
+    toVerify = this.copies;
+    this.!copies = List[];
+    this.performCopies(toVerify)
+  }
+
+  mutable fun performCopies(copies: List<Copy>): Bool {
+    withChange = false;
+    copies match {
+    | List.Nil() -> void
+    | List.Cons(Copy(dirName, target, convert, optTick, keys), rl) ->
+      !withChange = this.performCopies(rl);
+      // Check if target dir exist
+      // - if exist perform copy
+      // - else cancel copy
+      this.unsafeMaybeGetEagerDir(target) match {
+      | Some(tdir) ->
+        this.unsafeMaybeGetEagerDir(dirName) match {
+        | Some(dir) ->
+          (isReset, changes) = optTick match {
+          | Some(tick) -> dir.getChangesAfter(tick)
+          | _ -> (true, SortedSet[])
+          };
+          if (isReset) {
+            !withChange = true;
+            oldKeys = keys;
+            !keys = SortedMap[];
+            dir.unsafeIterKeys((key, _) -> {
+              values = dir.getArrayRaw(key);
+              if (!values.isEmpty()) {
+                converted = convert(this, key, values);
+                !oldKeys = oldKeys.remove(key);
+                !keys = keys.set(key, converted.i0);
+              }
+            });
+            oldKeys.each((key, ckey) -> {
+              source = Path::create(dir.dirName, key);
+              !tdir = tdir.writeEntry(this, source, source, ckey, Array[]);
+            });
+          } else {
+            for (key in changes) {
+              values = dir.getArrayRaw(key).collect(Array);
+              !withChange = true;
+              source = Path::create(dir.dirName, key);
+              // remove previous value in case of generated key is not the same
+              if (keys.containsKey(key)) {
+                !tdir = tdir.writeEntry(
+                  this,
+                  source,
+                  source,
+                  keys.get(key),
+                  Array[],
+                );
+                !keys = keys.remove(key)
+              };
+              if (!values.isEmpty()) {
+                converted = convert(this, key, values);
+                !tdir = tdir.writeEntry(
+                  this,
+                  source,
+                  source,
+                  converted.i0,
+                  converted.i1,
+                );
+                !keys = keys.set(key, converted.i0)
+              }
+            }
+          };
+          this.setDir(tdir.dirName, tdir);
+          this.!copies = List.Cons(
+            Copy(dirName, target, convert, Some(this.tick), keys),
+            this.copies,
+          )
+        | _ ->
+          if (!keys.isEmpty()) {
+            keys.each((key, ckey) -> {
+              source = Path::create(dirName, key);
+              !tdir = tdir.writeEntry(this, source, source, ckey, Array[]);
+            });
+            this.setDir(tdir.dirName, tdir)
+          }
+        }
       | _ -> void
       }
-    );
-    withChange
+    };
+    withChange;
   }
 
   mutable fun checkPostWrites(): Bool {
@@ -845,7 +866,8 @@ mutable class Context{
         invariant(this.dirtyReaders.isEmpty());
         withPostWrites = this.checkPostWrites();
         withPre = this.updatePre();
-        withChanges = withPostWrites || withPre;
+        withCopies = this.updateCopies();
+        withChanges = withPostWrites || withPre || withCopies;
         this.!toReset = SortedSet[];
         this.!tick = this.tick.next();
         break withChanges
@@ -1161,7 +1183,7 @@ mutable class Context{
     if (this.debugMode) {
       print_string("REMOVED: " + dirName);
     };
-    (deletedKeys, copies) = this.unsafeMaybeGetEagerDir(dirName) match {
+    this.unsafeMaybeGetEagerDir(dirName) match {
     | None() -> return void
     | Some(dir) ->
       for (parentName => _ in dir.parents) {
@@ -1171,17 +1193,12 @@ mutable class Context{
           !parent.childDirs = parent.childDirs.remove(dirName);
           this.setDir(parent.dirName, parent)
         }
-      };
-      dir.created.each(this.removeDir);
-      (dir.keys(), dir.copies)
+      }
     };
     this.!deps = this.deps.removeDir(dirName);
     this.!dirsWithSharedSubDirs = this.dirsWithSharedSubDirs.remove(dirName);
     this.!sharedSubDirsRefCount = this.sharedSubDirsRefCount.remove(dirName);
-    this.setDir(
-      dirName,
-      DeletedDir{dirName, time => this.timeStamp(), deletedKeys, copies},
-    );
+    this.setDir(dirName, DeletedDir{dirName, time => this.timeStamp()});
   }
 
   mutable fun transitiveChildDirs(dirName: DirName): SortedSet<DirName> {

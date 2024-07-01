@@ -3,12 +3,7 @@
 /*****************************************************************************/
 module SKStore;
 
-class DeletedDir{
-  time: Time,
-  dirName: DirName,
-  deletedKeys: SortedSet<Key>,
-  copies: SortedMap<DirName, Bool>,
-} extends Dir {
+class DeletedDir{time: Time, dirName: DirName} extends Dir {
   fun incrRefCount(_context: mutable Context): void {
     void
   }

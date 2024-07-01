@@ -445,41 +445,6 @@ fun lazy(context: mutable Context, name: String, lazyFunPtr: UInt32): String {
   makeLazy(JSONID::keyType, JSONFile::type, context, name, lazyHandle.lazy)
 }
 
-@export("SKIP_SKStore_output")
-fun output(
-  context: mutable Context,
-  target: String,
-  sourceId: String,
-  watchId: UInt32,
-  init: SKJSON.CJSON,
-  update: SKJSON.CJSON,
-): void {
-  eager = EHandle(JSONID::keyType, JSONFile::type, DirName::create(sourceId));
-  _ = eager.copyTo(context, DirName::create(`/sk/${target}/`), false);
-  if (watchId <= 0) return void;
-  (init match {
-  | SKJSON.CJFloat(iv) ->
-    Some(
-      update match {
-      | SKJSON.CJFloat(uv) ->
-        Watch(
-          target,
-          watchId.toInt(),
-          FnHandle::make(UInt32::truncate(iv.toInt())),
-          Some(FnHandle::make(UInt32::truncate(uv.toInt()))),
-        )
-      | _ ->
-        Watch(
-          target,
-          watchId.toInt(),
-          FnHandle::make(UInt32::truncate(iv.toInt())),
-        )
-      },
-    )
-  | _ -> None()
-  }).each(w -> addWatch(context, w))
-}
-
 @export("SKIP_SKStore_update")
 fun update(): Float {
   if (SKStore.gHasContext() == 0) {
