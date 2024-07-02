@@ -4,7 +4,8 @@
     "outDir": "../dist/src",
     "baseUrl": ".",
     "paths": {
-      "#std/*": ["../../../prelude/ts/src/*"]
+      "#std/*": ["../../../prelude/ts/src/*"],
+      "#skmonitor/*": ["../../../skmonitor/ts/src/*"]
     },
     "strictNullChecks": true,
     "module": "node16",
