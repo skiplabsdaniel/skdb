@@ -11,6 +11,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@skip-wasm/std": "^1.0.2"
+    "@skip-wasm/std": "^1.0.4"
   }
 }
