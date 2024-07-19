@@ -67,21 +67,18 @@ export class ContextImpl implements Context {
   handles: Handles;
   ref: Ref;
   private queryResult: () => JSONObject[];
-  notify: () => void;
 
   constructor(
     skjson: SKJSON,
     exports: FromWasm,
     handles: Handles,
     queryResult: () => JSONObject[],
-    notify: () => void,
     ref: Ref,
   ) {
     this.skjson = skjson;
     this.exports = exports;
     this.handles = handles;
     this.ref = ref;
-    this.notify = notify;
     this.queryResult = queryResult;
   }
 
@@ -91,7 +88,6 @@ export class ContextImpl implements Context {
       this.exports,
       this.handles,
       this.queryResult,
-      this.notify,
       new Ref(),
     );
   }
@@ -309,8 +305,6 @@ export class ContextImpl implements Context {
     const result = this.skjson.runWithGC(fn);
     if (result < 0) {
       throw this.handles.delete(-result);
-    } else {
-      this.notify();
     }
   };
 
@@ -549,7 +543,6 @@ class LinksImpl implements Links {
   }
 
   complete = (utils: Utils, exports: object) => {
-    let notify: (() => void) | null = null;
     const fromWasm = exports as FromWasm;
     const skjson = () => {
       if (this.skjson == undefined) {
@@ -616,10 +609,6 @@ class LinksImpl implements Links {
         params,
       ]);
       const register = (value: Result<TJSON, TJSON>) => {
-        if (!notify) {
-          const skdbApp = this.env.shared.get("SKDB") as SKDBShared;
-          notify = skdbApp?.notify;
-        }
         setTimeout(() => {
           const result = jsu.runWithGC(() => {
             return Math.trunc(
@@ -634,8 +623,6 @@ class LinksImpl implements Links {
           });
           if (result < 0) {
             throw this.handles.delete(-result);
-          } else if (notify) {
-            notify();
           }
         }, 0);
       };
@@ -680,13 +667,6 @@ class LinksImpl implements Links {
     const queryResult = () => {
       return (this.env.shared.get("SKDB") as SKDBShared).queryResult();
     };
-    const checkAndNotify = () => {
-      if (!notify) {
-        const skdbApp = this.env.shared.get("SKDB") as SKDBShared;
-        notify = skdbApp?.notify;
-      }
-      notify();
-    };
     this.applyLazyFun = (fn: int, ctx: ptr, hdl: ptr, key: ptr) => {
       ref.push(ctx);
       const jsu = skjson();
@@ -695,7 +675,6 @@ class LinksImpl implements Links {
         fromWasm,
         this.handles,
         queryResult,
-        checkAndNotify,
         ref,
       );
       const res = jsu.exportJSON(
@@ -763,14 +742,7 @@ class LinksImpl implements Links {
       "SKStore",
       new SKStoreFactoryImpl(
         () =>
-          new ContextImpl(
-            skjson(),
-            fromWasm,
-            this.handles,
-            queryResult,
-            checkAndNotify,
-            ref,
-          ),
+          new ContextImpl(skjson(), fromWasm, this.handles, queryResult, ref),
         create,
         (dbName, asWorker) =>
           (this.env.shared.get("SKDB") as SKDBShared).createSync(
