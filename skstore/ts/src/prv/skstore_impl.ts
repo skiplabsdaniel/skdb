@@ -257,17 +257,26 @@ export class SKStoreImpl implements SKStore {
     return new LHandleImpl<K, Loadable<V, M>>(this.context, lazyHdl);
   }
 
-  log(object: any): void {
-    if (
-      typeof object == "object" &&
-      (("__isArrayProxy" in object && object.__isArrayProxy) ||
-        ("__isObjectProxy" in object && object.__isObjectProxy)) &&
-      "clone" in object
-    ) {
-      console.log(object.clone());
-    } else {
-      console.log(object);
-    }
+  jsonExtract(value: JSONObject, pattern: string): TJSON[] {
+    return this.context.jsonExtract(value, pattern);
+  }
+
+  log(...objects: TJSON[]): void {
+    const toLog = objects.map((object) => {
+      if (object === null) {
+        return null;
+      } else if (
+        typeof object == "object" &&
+        (("__isArrayProxy" in object && object.__isArrayProxy) ||
+          ("__isObjectProxy" in object && object.__isObjectProxy)) &&
+        "clone" in object
+      ) {
+        return (object as any).clone();
+      } else {
+        return object;
+      }
+    });
+    console.log(...toLog);
   }
 }
 
