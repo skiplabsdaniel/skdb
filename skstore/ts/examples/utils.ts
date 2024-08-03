@@ -7,17 +7,31 @@ import type {
   TTableHandle,
   TTable,
   createSKStore as CreateSKStore,
+  EHandle,
 } from "skstore";
 import { Server, type ServerOptions } from "socket.io";
 import { createInterface } from "readline";
 import { Command } from "commander";
 import fs from "fs";
 import { resolve } from "path";
+import { type Config, build } from "./keyvalue.js";
 
 export interface ReactiveStorage {
   tablesSchema: () => MirrorSchema[];
   initSKStore: (store: SKStore, ...table: TTableHandle[]) => void;
   scenarios: () => Step[][];
+}
+
+export interface KeyValueStorage extends ReactiveStorage {
+  config: {
+    name?: string;
+    inputs?: string[];
+    initSKStore: (
+      store: SKStore,
+      input: EHandle<TJSON, TJSON>,
+    ) => EHandle<TJSON, TJSON>;
+    scenarios?: string[][];
+  };
 }
 
 type Step = string;
@@ -311,10 +325,16 @@ export interface WatchListener {
 export class IOInputService implements ReactiveService {
   scenarios: Step[][];
   listener: WatchListener;
+  isKeyValue: boolean;
 
-  constructor(scenarios: Step[][], listener: WatchListener = new JSONLogger()) {
+  constructor(
+    scenarios: Step[][],
+    isKeyValue: boolean,
+    listener: WatchListener = new JSONLogger(),
+  ) {
     this.scenarios = scenarios;
     this.listener = listener;
+    this.isKeyValue = isKeyValue;
   }
 
   run = (...tables: any[]) => {
@@ -365,7 +385,17 @@ export class IOInputService implements ReactiveService {
                   error(`Unable to find ${name} table.`);
                   return;
                 }
-                table.insert(JSON.parse(values));
+                const inserts = JSON.parse(values);
+                if (!this.isKeyValue) {
+                  table.insert(inserts);
+                } else {
+                  table.insert(
+                    inserts.map((insert: [TJSON, TJSON]) => [
+                      JSON.stringify(insert[0]),
+                      JSON.stringify(insert[1]),
+                    ]),
+                  );
+                }
               },
             ],
             [
@@ -376,19 +406,38 @@ export class IOInputService implements ReactiveService {
                   error(`Unable to find ${name} table.`);
                   return;
                 }
-                table.deleteWhere(JSON.parse(where));
+                if (!this.isKeyValue) {
+                  table.deleteWhere(JSON.parse(where));
+                } else {
+                  const value = JSON.parse(where);
+                  if (typeof value != "object" || !("value" in value)) {
+                    throw new TypeError("Invalid delete command.");
+                  }
+                  if ("path" in value) {
+                    const prop = `json_get(key, '$${value.path}')`;
+                    const where: JSONObject = {};
+                    where[prop as keyof JSONObject] = JSON.stringify(
+                      value.value,
+                    );
+                    table.deleteWhere(where);
+                  } else {
+                    table.deleteWhere({ key: JSON.stringify(value.value) });
+                  }
+                }
               },
             ],
             [
-              /^select ([a-z_0-9]+) (.*)$/g,
-              (name: string, where: string) => {
+              /^show ([a-z_0-9]+)$/g,
+              (name: string) => {
                 const table = tablesByName.get(name);
                 if (!table) {
                   error(`Unable to find ${name} table.`);
                   return;
                 }
-                const jsdata = JSON.parse(where);
-                const result = table.select(jsdata.where, jsdata.colmuns);
+                const result = table.select(
+                  {},
+                  this.isKeyValue ? ["key", "value"] : [],
+                );
                 this.listener.table(result);
               },
             ],
@@ -401,10 +450,40 @@ export class IOInputService implements ReactiveService {
                   return;
                 }
                 const jsParams = JSON.parse(params);
-                table.updateWhere(jsParams.where, jsParams.update);
+                if (!this.isKeyValue) {
+                  table.updateWhere(jsParams.where, jsParams.update);
+                } else {
+                  table.updateWhere(
+                    { key: JSON.stringify(jsParams[0]) },
+                    { value: JSON.stringify(jsParams[1]) },
+                  );
+                }
               },
             ],
           ];
+          if (!this.isKeyValue) {
+            patterns.push([
+              /^select ([a-z_0-9]+) (.*)$/g,
+              (name: string, where: string) => {
+                const table = tablesByName.get(name);
+                if (!table) {
+                  error(`Unable to find ${name} table.`);
+                  return;
+                }
+                let jsdata;
+                if (!this.isKeyValue) {
+                  jsdata = JSON.parse(where);
+                } else {
+                  jsdata = {
+                    where: {},
+                    columns: ["key", "value"],
+                  };
+                }
+                const result = table.select(jsdata.where, jsdata.colmuns);
+                this.listener.table(result);
+              },
+            ]);
+          }
           let done = false;
           for (let i = 0; i < patterns.length; i++) {
             const pattern = patterns[i];
@@ -518,12 +597,20 @@ export async function main(createSKStore: typeof CreateSKStore) {
   }
   const path = resolve(file);
   try {
-    var storage = (await import(path)) as ReactiveStorage;
+    var isKeyValue = false;
+    var storage: ReactiveStorage;
+    var module = await import(path);
+    if ("tablesSchema" in module) {
+      storage = module as ReactiveStorage;
+    } else {
+      storage = build(module as Config) as ReactiveStorage;
+      isKeyValue = true;
+    }
     switch (options.mode) {
       case "io":
         await start(
           createSKStore,
-          new IOInputService(storage.scenarios()),
+          new IOInputService(storage.scenarios(), isKeyValue),
           storage,
           connect,
         );

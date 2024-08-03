@@ -1666,13 +1666,13 @@ function toWhere(
     if (Array.isArray(field)) {
       const inVal: string[] = [];
       for (let idx = 0; idx < field.length; idx++) {
-        const pName = prefix + idx + "_" + column.name;
+        const pName = prefix + idx + "_value";
         params[pName] = field[idx];
         inVal.push(`@${pName}`);
       }
       exprs.push(`${column.name} IN (${inVal.join(", ")})`);
     } else {
-      const pName = prefix + column.name;
+      const pName = prefix + "value";
       params[pName] = field;
       exprs.push(`${column.name} = @${pName}`);
     }
@@ -1707,13 +1707,13 @@ function toSelectWhere(select: JSONObject, prefix: string = ""): Query {
     if (Array.isArray(field)) {
       const inVal: string[] = [];
       for (let idx = 0; idx < field.length; idx++) {
-        const pName = prefix + idx + "_" + column;
+        const pName = prefix + idx + "_value";
         params[pName] = field[idx];
         inVal.push(`@${pName}`);
       }
       exprs.push(`${column} IN (${inVal.join(", ")})`);
     } else {
-      const pName = prefix + column;
+      const pName = prefix + "value";
       params[pName] = field;
       exprs.push(`${column} = @${pName}`);
     }
