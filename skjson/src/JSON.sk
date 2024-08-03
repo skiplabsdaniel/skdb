@@ -207,8 +207,7 @@ fun getForPath(value: CJSON, path: String): ?CJSON {
         };
         current match {
         | CJArray _ -> void
-        | _ ->
-          return None()
+        | _ -> return None()
         };
         !array = Some(true);
         !index = -1
@@ -230,8 +229,7 @@ fun getForPath(value: CJSON, path: String): ?CJSON {
       | '[' ->
         current match {
         | CJArray _ -> void
-        | _ ->
-          return None()
+        | _ -> return None()
         };
         !array = Some(true);
         !index = -1
