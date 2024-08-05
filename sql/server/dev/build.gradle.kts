@@ -18,6 +18,7 @@ dependencies {
 
   // coroutines
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1")
+  implementation("com.fasterxml.jackson.core:jackson-databind:2.16.1") // json
 
   implementation(project(":core"))
 }

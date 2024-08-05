@@ -44,6 +44,7 @@ import io.undertow.websockets.spi.WebSocketHttpExchange
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.OutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.security.SecureRandom
 import java.util.Base64
@@ -53,6 +54,13 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.atomic.AtomicReference
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.NullNode
+import com.fasterxml.jackson.databind.node.ObjectNode
+import com.fasterxml.jackson.databind.node.TextNode
+
+val jsonMapper = ObjectMapper()
 
 fun Credentials.toProtoCredentials(): ProtoCredentials {
   return ProtoCredentials(accessKey, ByteBuffer.wrap(privateKey))
@@ -438,16 +446,187 @@ fun schemaHandler(): HttpHandler {
       })
 }
 
+data class ToInsert(
+  var key: JsonNode = NullNode.getInstance(),
+  var value: JsonNode = NullNode.getInstance())
+
+data class Insert(
+  var name: String = "",
+  var values: Array<ToInsert> = arrayOf())
+
+data class ToDelete(
+  var key: JsonNode = NullNode.getInstance(),
+  var path: String = "")
+
+data class Delete(
+  var name: String = "",
+  var value: ToDelete? = null)
+
+
+fun insertHandler(): HttpHandler {
+  return BlockingHandler(
+      object : HttpHandler {
+        override fun handleRequest(exchange: HttpServerExchange) {
+          exchange.responseHeaders.put(HttpString("Access-Control-Allow-Origin"), "*")
+          exchange.responseHeaders.put(HttpString("Access-Control-Allow-Methods"), "POST")
+
+          val pathParams = exchange.getAttachment(PathTemplateMatch.ATTACHMENT_KEY).getParameters()
+          val db = pathParams["database"]
+          if (db == null) {
+            throw RuntimeException("database not provided")
+          }
+
+          if (exchange.requestMethod == Methods.POST) {
+            val contentType = exchange.requestHeaders.getFirst(Headers.CONTENT_TYPE);
+            if (contentType != null && contentType.equals("application/json", ignoreCase = true)) {  
+              var skdb = openSkdb(db)
+              if (skdb == null) {
+                createDb(db)
+                skdb = openSkdb(db)
+              }
+              exchange.requestReceiver.receiveFullString { reqExchange, message ->
+                try {
+                    val tables: Array<Insert> = jsonMapper.readValue(message, Array<Insert>::class.java)
+                    try {
+                      val query = StringBuilder()
+                      val values = StringBuilder()
+                      val params : MutableMap<String, String> = mutableMapOf()
+                      var count = 1;
+                      for (table in tables) {
+                        if (!values.isEmpty()) {
+                          values.append(", ")
+                        }
+                        table.values.forEachIndexed { index, element ->
+                          if (index > 0) {
+                            values.append(", ")
+                          }
+                          val var1 = "var_$count";
+                          count++;
+                          val var2 = "var_$count";
+                          count++;
+                          values.append("( @$var1, @$var2, 'read-write' )")
+                          params.put(var1, jsonMapper.writeValueAsString(element.key));
+                          params.put(var2, jsonMapper.writeValueAsString(element.value));
+                        }
+                        val name = table.name
+                        query.append("INSERT OR REPLACE INTO $name (key, value, skdb_access) VALUES $values;\n")
+                        values.clear()
+                      }
+                      val po = skdb!!.sql(query.toString(), params, OutputFormat.RAW)
+                      if (po.exitCode == 0) {
+                        reqExchange.statusCode = StatusCodes.OK
+                      } else {
+                        System.err.println(query.toString());
+                        System.err.println(po.decode());
+                        reqExchange.statusCode = StatusCodes.BAD_REQUEST
+                      }
+                    } catch (ex: Exception) {
+                      reqExchange.statusCode = StatusCodes.BAD_REQUEST
+                    }
+                } catch (e: IOException) {
+                  System.err.println(e)
+                  reqExchange.statusCode = StatusCodes.INTERNAL_SERVER_ERROR
+                }
+              }
+            } else {
+              exchange.setStatusCode(StatusCodes.UNSUPPORTED_MEDIA_TYPE);
+            }
+          } else {
+            exchange.statusCode = StatusCodes.METHOD_NOT_ALLOWED
+          }
+        }
+      })
+}
+
+fun deleteHandler(): HttpHandler {
+  return BlockingHandler(
+      object : HttpHandler {
+        override fun handleRequest(exchange: HttpServerExchange) {
+          exchange.responseHeaders.put(HttpString("Access-Control-Allow-Origin"), "*")
+          exchange.responseHeaders.put(HttpString("Access-Control-Allow-Methods"), "POST")
+
+          val pathParams = exchange.getAttachment(PathTemplateMatch.ATTACHMENT_KEY).getParameters()
+          val db = pathParams["database"]
+          if (db == null) {
+            throw RuntimeException("database not provided")
+          }
+
+          if (exchange.requestMethod == Methods.POST) {
+            val contentType = exchange.requestHeaders.getFirst(Headers.CONTENT_TYPE);
+            if (contentType != null && contentType.equals("application/json", ignoreCase = true)) {  
+              var skdb = openSkdb(db)
+              if (skdb == null) {
+                createDb(db)
+                skdb = openSkdb(db)
+              }
+              exchange.requestReceiver.receiveFullString { reqExchange, message ->
+                try {
+                    val tables: Array<Delete> = jsonMapper.readValue(message, Array<Delete>::class.java)
+                    try {
+                      val query = StringBuilder()
+                      val params : MutableMap<String, String> = mutableMapOf()
+                      var count = 1;
+                      for (table in tables) {
+                        if (table.value == null) continue
+                        val element = table.value!!;
+                        var prop = "key";
+                        if (!element.path.isEmpty()) {
+                          val ppath = "var_$count";
+                          count++;
+                          prop = "json_get(key, @$ppath)"
+                          params.put(ppath, "\$" + element.path);
+                        }
+                        val name = table.name
+                        val value = "var_$count";
+                        count++;
+                        params.put(value, jsonMapper.writeValueAsString(element.key));
+                        query.append("DELETE FROM $name WHERE $prop = @$value;\n")
+                      }
+                      val po = skdb!!.sql(query.toString(), params, OutputFormat.RAW)
+                      if (po.exitCode == 0) {
+                        reqExchange.statusCode = StatusCodes.OK
+                      } else {
+                        System.err.println(query.toString());
+                        System.err.println(po.decode());
+                        reqExchange.statusCode = StatusCodes.BAD_REQUEST
+                      }
+                    } catch (ex: Exception) {
+                      reqExchange.statusCode = StatusCodes.BAD_REQUEST
+                    }
+                } catch (e: IOException) {
+                  System.err.println(e)
+                  reqExchange.statusCode = StatusCodes.INTERNAL_SERVER_ERROR
+                }
+              }
+            } else {
+              exchange.setStatusCode(StatusCodes.UNSUPPORTED_MEDIA_TYPE);
+            }
+          } else {
+            exchange.statusCode = StatusCodes.METHOD_NOT_ALLOWED
+          }
+        }
+      })
+}
+
+
 fun createHttpServer(
     connectionHandler: HttpHandler,
     usersHandler: HttpHandler,
-    schemaHandler: HttpHandler
+    schemaHandler: HttpHandler,
+    insertHandler: HttpHandler?,
+    deleteHandler: HttpHandler?,
 ): Undertow {
   var pathHandler =
       PathTemplateHandler()
           .add("/dbs/{database}/connection", connectionHandler)
           .add("/dbs/{database}/users", usersHandler)
           .add("/dbs/{database}/schema", schemaHandler)
+  if (insertHandler != null) {
+    pathHandler = pathHandler.add("/dbs/{database}/insert", insertHandler)
+  }
+  if (deleteHandler != null) {
+    pathHandler = pathHandler.add("/dbs/{database}/delete", deleteHandler)
+  }
   return Undertow.builder().addHttpListener(ENV.port, "0.0.0.0").setHandler(pathHandler).build()
 }
 
@@ -466,7 +645,9 @@ fun main(args: Array<String>) {
   val connHandler = connectionHandler(workerPool, taskPool)
   val usersHandler = usersHandler()
   val schemaHandler = schemaHandler()
-  val server = createHttpServer(connHandler, usersHandler, schemaHandler)
+  val insertHandler = if (ENV.skstore) insertHandler() else null;
+  val deleteHandler = if (ENV.skstore) deleteHandler() else null;
+  val server = createHttpServer(connHandler, usersHandler, schemaHandler, insertHandler, deleteHandler)
   server.start()
 
   println("SKDB dev server has started")
@@ -474,5 +655,8 @@ fun main(args: Array<String>) {
   println("The following dev resources are available:")
   println("GET /dbs/{database}/users")
   println("PUT /dbs/{database}/schema")
+  if (ENV.skstore) {
+    println("POST /dbs/{database}/insert")
+  }
   println("------------------------------------------------------")
 }

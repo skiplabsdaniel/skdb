@@ -636,6 +636,18 @@ class LinksImpl implements Links {
             dbName,
             asWorker,
           ),
+        (key: string) => {
+          const keyBytes = this.env.base64Decode(key);
+          return this.env
+            .crypto()
+            .subtle.importKey(
+              "raw",
+              keyBytes,
+              { name: "HMAC", hash: "SHA-256" },
+              false,
+              ["sign"],
+            );
+        },
       ),
     );
   };

@@ -27,6 +27,7 @@ import type {
   AsyncLazyCompute,
   ALParameters,
   NonEmptyIterator,
+  Database,
 } from "../skstore_api.js";
 
 // prettier-ignore
@@ -391,15 +392,18 @@ export class SKStoreFactoryImpl implements SKStoreFactory {
     dbName?: string,
     asWorker?: boolean,
   ) => Promise<SKDBSync>;
+  private createKey: (key: string) => Promise<CryptoKey>;
 
   constructor(
     context: () => Context,
     create: (init: () => void) => void,
     createSync: (dbName?: string, asWorker?: boolean) => Promise<SKDBSync>,
+    createKey: (key: string) => Promise<CryptoKey>,
   ) {
     this.context = context;
     this.create = create;
     this.createSync = createSync;
+    this.createKey = createKey;
   }
 
   getName = () => "SKStore";
@@ -407,11 +411,19 @@ export class SKStoreFactoryImpl implements SKStoreFactory {
   runSKStore = async (
     init: (skstore: SKStore, ...tables: TableHandle<TJSON[]>[]) => void,
     tablesSchema: MirrorSchema[],
-    connect: boolean = true,
+    database: Database | null,
   ): Promise<Table<TJSON[]>[]> => {
     let context = this.context();
     let skdb = await this.createSync();
-    const tables = mirror(context, skdb, connect, ...tablesSchema);
+    let cdatabase = database
+      ? {
+          name: database.name,
+          access: database.access,
+          private: await this.createKey(database.private),
+          endpoint: database.endpoint,
+        }
+      : null;
+    const tables = await mirror(context, skdb, cdatabase, ...tablesSchema);
     const skstore = new SKStoreImpl(context);
     this.create(() => init(skstore, ...tables));
     return tables.map((t) => (t as TableHandleImpl<TJSON[]>).toTable());
@@ -425,22 +437,37 @@ export class SKStoreFactoryImpl implements SKStoreFactory {
  * @param tables - tables the mirroring info
  * @returns - the mirrors table handles
  */
-export function mirror(
+export async function mirror(
   context: Context,
   skdb: SKDBSync,
-  connect: boolean,
+  database: {
+    name: string;
+    access: string;
+    private: CryptoKey;
+    endpoint?: string;
+  } | null,
   ...tables: MirrorSchema[]
-): TableHandle<TJSON[]>[] {
-  if (connect) {
-    skdb.mirror(...toMirrorDefinitions(...tables));
-  } else {
-    /*
-    console.log("Warning:");
-    console.log("\tThe mirror tables filter are not applied.");
-    console.log(
-      "\tThe produced data will be lost as soon as the process shutdown.",
+): Promise<TableHandle<TJSON[]>[]> {
+  if (database) {
+    await skdb.connect(
+      database.name,
+      database.access,
+      database.private,
+      database.endpoint,
     );
-    */
+    if (!skdb.connectedRemote) {
+      throw new Error("Unable to connect to server.");
+    }
+    for (const table of tables) {
+      const query = create(table);
+      await skdb.connectedRemote!.exec(
+        query.query,
+        query.params ? toParams(query.params) : undefined,
+      );
+    }
+    const definitions = toMirrorDefinitions(...tables);
+    await skdb.mirror(...definitions);
+  } else {
     tables.forEach((table) => {
       const query = create(table);
       skdb.exec(query.query, query.params ? toParams(query.params) : undefined);
@@ -529,7 +556,7 @@ function toWhere(
       }
       exprs.push(`${column.name} IN (${inVal.join(", ")})`);
     } else {
-      const pName = prefix + "value";
+      const pName = prefix + i + "_value";
       params[pName] = field;
       exprs.push(`${column.name} = @${pName}`);
     }
@@ -559,7 +586,7 @@ function toSelectWhere(select: JSONObject, prefix: string = ""): Query {
   if (keys.length <= 0) return { query: "true" };
   let exprs: string[] = [];
   let params: JSONObject = {};
-  keys.forEach((column: keyof JSONObject) => {
+  keys.forEach((column: keyof JSONObject, c: number) => {
     const field = select[column];
     if (Array.isArray(field)) {
       const inVal: string[] = [];
@@ -570,7 +597,7 @@ function toSelectWhere(select: JSONObject, prefix: string = ""): Query {
       }
       exprs.push(`${column} IN (${inVal.join(", ")})`);
     } else {
-      const pName = prefix + "value";
+      const pName = prefix + c + "_value";
       params[pName] = field;
       exprs.push(`${column} = @${pName}`);
     }

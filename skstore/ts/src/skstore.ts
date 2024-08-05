@@ -12,6 +12,7 @@ import type {
   TJSON,
   JSONObject,
   Accumulator,
+  Database,
 } from "./skstore_api.js";
 
 export type {
@@ -66,9 +67,9 @@ async function wasmUrl(): Promise<URL> {
 export async function createSKStore(
   init: (skstore: SKStore, ...tables: TableHandle<TJSON[]>[]) => void,
   tables: MirrorSchema[],
-  connect: boolean = true,
+  database: Database | null,
 ): Promise<Table<TJSON[]>[]> {
   let data = await runUrl(wasmUrl, modules, [], "SKDB_factory");
   const factory = data.environment.shared.get("SKStore") as SKStoreFactory;
-  return factory.runSKStore(init, tables, connect);
+  return factory.runSKStore(init, tables, database);
 }

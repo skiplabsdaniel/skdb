@@ -419,11 +419,18 @@ export type Mapping<
   params?: Param[];
 };
 
+export type Database = {
+  name: string;
+  access: string;
+  private: string;
+  endpoint?: string;
+};
+
 export interface SKStoreFactory extends Shared {
   runSKStore(
     init: (skstore: SKStore, ...tables: TableHandle<TJSON[]>[]) => void,
     tables: MirrorSchema[],
-    connect?: boolean,
+    database: Database | null,
   ): Promise<Table<TJSON[]>[]>;
 }
 

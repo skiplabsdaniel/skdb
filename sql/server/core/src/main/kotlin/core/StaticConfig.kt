@@ -15,14 +15,13 @@ class UserConfig(
     val skdbPath: String,
     val skdbInitPath: String,
     val skdbDatabases: String,
-    val addCredFormat: String,
+    val skstore: Boolean,
 ) {
   companion object {
     val SKDB = "/skdb/build/skdb"
     val SKDB_INIT = "/skdb/build/init.sql"
     val SKDB_DATABASES = "/var/db"
-    val SKDB_ADD_CRED =
-        "cd /skdb/build/package && npx skdb-cli --add-cred --host ws://localhost:%d --db %s --access-key %s <<< \"%s\""
+    val SKSTORE = false
 
     private fun userConfigFile(): Optional<String> {
       var path = Paths.get("").toAbsolutePath()
@@ -46,7 +45,7 @@ class UserConfig(
             prop.getProperty("skdb", SKDB),
             prop.getProperty("skdb_init", SKDB_INIT),
             prop.getProperty("skdb_databases", SKDB_DATABASES),
-            prop.getProperty("skdb_add_cred", SKDB_ADD_CRED),
+            prop.getProperty("skstore", "" + SKSTORE) == "true",
         )
       }
     }
@@ -56,13 +55,7 @@ class UserConfig(
       if (user_config_file.isPresent()) {
         return fromFile(user_config_file.get())
       }
-      return UserConfig(
-          port,
-          SKDB,
-          SKDB_INIT,
-          SKDB_DATABASES,
-          SKDB_ADD_CRED,
-      )
+      return UserConfig(port, SKDB, SKDB_INIT, SKDB_DATABASES, SKSTORE)
     }
   }
 
