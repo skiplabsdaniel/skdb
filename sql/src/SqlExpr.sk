@@ -345,7 +345,16 @@ class ExprEvaluator(
       | None() -> invariant_violation("Could not find up environment")
       | Some(evaluator) -> evaluator.evalCJExpr(context, x)
       }
-
+    | SKDB.CJSONGet(e, path) ->
+      this.json_get(
+        this.evalCJExpr(context, e),
+        this.evalCSExpr(context, path),
+      ) match {
+      | ASuccess() -> unexpectedSideEffect()
+      | AUndef() -> AUndef()
+      | ANull() -> ANull()
+      | x -> x
+      }
     | CSub _
     | CMul _
     | CNull()
@@ -573,6 +582,43 @@ class ExprEvaluator(
         Diff(),
         this.evalCSExpr(context, e1),
         this.evalCSExpr(context, e2),
+      )
+
+    | CJLte(e1, e2) ->
+      this.bjopCompare(
+        Lte(),
+        this.evalCJExpr(context, e1),
+        this.evalCJExpr(context, e2),
+      )
+    | CJLt(e1, e2) ->
+      this.bjopCompare(
+        Lt(),
+        this.evalCJExpr(context, e1),
+        this.evalCJExpr(context, e2),
+      )
+    | CJGte(e1, e2) ->
+      this.bjopCompare(
+        Gte(),
+        this.evalCJExpr(context, e1),
+        this.evalCJExpr(context, e2),
+      )
+    | CJGt(e1, e2) ->
+      this.bjopCompare(
+        Gt(),
+        this.evalCJExpr(context, e1),
+        this.evalCJExpr(context, e2),
+      )
+    | CJEq(e1, e2) ->
+      this.bjopCompare(
+        Eq(),
+        this.evalCJExpr(context, e1),
+        this.evalCJExpr(context, e2),
+      )
+    | CJDiff(e1, e2) ->
+      this.bjopCompare(
+        Diff(),
+        this.evalCJExpr(context, e1),
+        this.evalCJExpr(context, e2),
       )
 
     | CAdd(e1, e2) ->
@@ -828,6 +874,32 @@ class ExprEvaluator(
         ).flatMap(n2 -> ADef(btoi(n1 == 0 || n2 == 0)))
       )
 
+    | CJBetween(e1, e2, e3) ->
+      this.bjopCompare(
+        Lte(),
+        this.evalCJExpr(context, e2),
+        this.evalCJExpr(context, e1),
+      ).flatMap(n1 ->
+        this.bjopCompare(
+          Lte(),
+          this.evalCJExpr(context, e1),
+          this.evalCJExpr(context, e3),
+        ).flatMap(n2 -> ADef(btoi(n1 != 0 && n2 != 0)))
+      )
+
+    | CJNotBetween(e1, e2, e3) ->
+      this.bjopCompare(
+        Lte(),
+        this.evalCJExpr(context, e2),
+        this.evalCJExpr(context, e1),
+      ).flatMap(n1 ->
+        this.bjopCompare(
+          Lte(),
+          this.evalCJExpr(context, e1),
+          this.evalCJExpr(context, e3),
+        ).flatMap(n2 -> ADef(btoi(n1 == 0 || n2 == 0)))
+      )
+
     | CSLike(e1, pattern) ->
       this.evalCSExpr(context, e1).flatMap(text -> {
         ADef(btoi(matching(text, pattern)))
@@ -951,6 +1023,25 @@ class ExprEvaluator(
 
       for (elt in set) {
         this.bsopCompare(Eq(), v, this.evalCSExpr(context, elt)) match {
+        | AUndef() -> return AUndef()
+        | ANull() -> !hasNull = true
+        | ADef(0) -> void
+        | x -> break x
+        }
+      } else {
+        if (hasNull) {
+          ANull()
+        } else {
+          ADef(0)
+        }
+      }
+
+    | CJIn(vExpr, set) ->
+      v = this.evalCJExpr(context, vExpr);
+      hasNull = v is ANull();
+
+      for (elt in set) {
+        this.bjopCompare(Eq(), v, this.evalCJExpr(context, elt)) match {
         | AUndef() -> return AUndef()
         | ANull() -> !hasNull = true
         | ADef(0) -> void
@@ -1130,6 +1221,37 @@ class ExprEvaluator(
             },
           ),
         )
+      })
+    )
+  }
+
+  fun bjopCompare(
+    bop: ComparisonKind,
+    se1: AValue<CJSON>,
+    se2: AValue<CJSON>,
+  ): AValue<Int> {
+    se1.flatMap(s1 ->
+      se2.flatMap(s2 -> {
+        ADef(
+          btoi(
+            bop match {
+            | Lt() -> s1 < s2
+            | Lte() -> s1 <= s2
+            | Gte() -> s1 >= s2
+            | Gt() -> s1 > s2
+            | Eq() -> s1 == s2
+            | Diff() -> s1 != s2
+            },
+          ),
+        )
+      })
+    )
+  }
+
+  fun json_get(value: AValue<CJSON>, path: AValue<String>): AValue<CJSON> {
+    value.flatMap(v ->
+      path.flatMap(p -> {
+        SKJSON.getForPath(v.value, p).map(v -> ADef(CJSON(v))).default(ANull())
       })
     )
   }

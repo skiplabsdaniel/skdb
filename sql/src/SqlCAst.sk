@@ -401,6 +401,15 @@ class CSNotBetween(
 ) extends CExpr<Int>
 class CSLike(CExpr<String>, Pattern) extends CExpr<Int>
 
+class CJLte(CExpr<CJSON>, CExpr<CJSON>) extends CExpr<Int>
+class CJLt(CExpr<CJSON>, CExpr<CJSON>) extends CExpr<Int>
+class CJGte(CExpr<CJSON>, CExpr<CJSON>) extends CExpr<Int>
+class CJGt(CExpr<CJSON>, CExpr<CJSON>) extends CExpr<Int>
+class CJEq(CExpr<CJSON>, CExpr<CJSON>) extends CExpr<Int>
+class CJDiff(CExpr<CJSON>, CExpr<CJSON>) extends CExpr<Int>
+class CJBetween(CExpr<CJSON>, CExpr<CJSON>, CExpr<CJSON>) extends CExpr<Int>
+class CJNotBetween(CExpr<CJSON>, CExpr<CJSON>, CExpr<CJSON>) extends CExpr<Int>
+
 class CAdd<T: frozen>(CExpr<T>, CExpr<T>) extends CExpr<T>
 class CSub<T: frozen>(CExpr<T>, CExpr<T>) extends CExpr<T>
 class CMul<T: frozen>(CExpr<T>, CExpr<T>) extends CExpr<T>
@@ -412,6 +421,7 @@ class CIf<T: frozen>(CExpr<Int>, CExpr<T>, CExpr<T>) extends CExpr<T>
 class CIIn(CExpr<Int>, Array<CExpr<Int>>) extends CExpr<Int>
 class CFIn(CExpr<Float>, Array<CExpr<Float>>) extends CExpr<Int>
 class CSIn(CExpr<String>, Array<CExpr<String>>) extends CExpr<Int>
+class CJIn(CExpr<CJSON>, Array<CExpr<CJSON>>) extends CExpr<Int>
 
 class CExists(cselect: CSelect) extends CExpr<Int> {
   fun hash(): Int {
@@ -467,6 +477,8 @@ class CStrftime(
   CExpr<String>,
   Array<CExpr<String>>,
 ) extends CExpr<String>
+
+class CJSONGet(CExpr<CJSON>, CExpr<String>) extends CExpr<CJSON>
 
 class COn(P.JoinKind, CExpr<Int>) extends CExpr<Int>
 
