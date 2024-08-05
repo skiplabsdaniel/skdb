@@ -15,6 +15,7 @@ import { Command } from "commander";
 import fs from "fs";
 import { resolve } from "path";
 import { type Config, build } from "./keyvalue.js";
+import * as http from "http";
 
 export interface ReactiveStorage {
   tablesSchema: () => MirrorSchema[];
@@ -33,6 +34,11 @@ export interface KeyValueStorage extends ReactiveStorage {
     scenarios?: string[][];
   };
 }
+
+type ToDelete = {
+  key: string;
+  path?: string;
+};
 
 type Step = string;
 
@@ -326,15 +332,18 @@ export class IOInputService implements ReactiveService {
   scenarios: Step[][];
   listener: WatchListener;
   isKeyValue: boolean;
+  database: string | null;
 
   constructor(
     scenarios: Step[][],
     isKeyValue: boolean,
+    database: string | null,
     listener: WatchListener = new JSONLogger(),
   ) {
     this.scenarios = scenarios;
     this.listener = listener;
     this.isKeyValue = isKeyValue;
+    this.database = database;
   }
 
   run = (...tables: any[]) => {
@@ -388,13 +397,15 @@ export class IOInputService implements ReactiveService {
                 const inserts = JSON.parse(values);
                 if (!this.isKeyValue) {
                   table.insert(inserts);
+                } else if (!this.database) {
+                  const waccess = inserts.map((insert: [TJSON, TJSON]) => [
+                    JSON.stringify(insert[0]),
+                    JSON.stringify(insert[1]),
+                    "read-write",
+                  ]);
+                  table.insert(waccess);
                 } else {
-                  table.insert(
-                    inserts.map((insert: [TJSON, TJSON]) => [
-                      JSON.stringify(insert[0]),
-                      JSON.stringify(insert[1]),
-                    ]),
-                  );
+                  postInsert(this.database, table.getName(), inserts);
                 }
               },
             ],
@@ -408,7 +419,7 @@ export class IOInputService implements ReactiveService {
                 }
                 if (!this.isKeyValue) {
                   table.deleteWhere(JSON.parse(where));
-                } else {
+                } else if (!this.database) {
                   const value = JSON.parse(where);
                   if (typeof value != "object" || !("value" in value)) {
                     throw new TypeError("Invalid delete command.");
@@ -423,6 +434,17 @@ export class IOInputService implements ReactiveService {
                   } else {
                     table.deleteWhere({ key: JSON.stringify(value.value) });
                   }
+                } else {
+                  const value = JSON.parse(where);
+                  if (typeof value != "object" || !("value" in value)) {
+                    throw new TypeError("Invalid delete command.");
+                  }
+                  postDelete(this.database, table.getName(), [
+                    {
+                      key: value.value,
+                      path: "path" in value ? value.path : "",
+                    },
+                  ]);
                 }
               },
             ],
@@ -540,17 +562,53 @@ export class JSONLogger implements WatchListener {
   };
 }
 
+async function getCreds(
+  database: string,
+  port: number = 3586,
+  host: string = "localhost",
+) {
+  const creds = new Map();
+  try {
+    const resp = await fetch(`http://${host}:${port}/dbs/${database}/users`);
+    const data = await resp.text();
+    const users = data
+      .split("\n")
+      .filter((line) => line.trim() != "")
+      .map((line) => JSON.parse(line));
+    for (const user of users) {
+      creds.set(user.accessKey, user.privateKey);
+    }
+  } catch (ex: any) {
+    throw new Error("Could not fetch from the dev server, is it running?");
+  }
+
+  return creds;
+}
+
 export async function start(
   createSKStore: typeof CreateSKStore,
   service: ReactiveService,
   storage: ReactiveStorage,
-  connect: boolean = true,
+  database: string | null,
+  port: number = 3586,
 ) {
   try {
+    const creds = database ? await getCreds(database, port) : null;
+    const cdatabase = database
+      ? {
+          name: database,
+          access: "root",
+          private: creds?.get("root"),
+          endpoint: `ws://localhost:${port}`,
+        }
+      : null;
+    if (cdatabase && !cdatabase.private) {
+      throw new Error("Unable to retrieve root credential.");
+    }
     const tables = await createSKStore(
       storage.initSKStore,
       storage.tablesSchema(),
-      connect,
+      cdatabase,
     );
     service.run(...tables);
   } catch (e) {
@@ -574,7 +632,10 @@ export async function main(createSKStore: typeof CreateSKStore) {
       "Port number in socket server mode (default: 3000)",
       "3000",
     )
-    .option("-c, --connect", "Specify if the tables are mirrored", false)
+    .option(
+      "-c, --connect <database>",
+      "Specify the database to connect for table mirroring",
+    )
     .parse(process.argv);
 
   const options = program.opts();
@@ -584,13 +645,13 @@ export async function main(createSKStore: typeof CreateSKStore) {
     console.log(program.usage());
     return;
   }
-  let connect = false;
-  if (typeof options.connect == "string") {
-    connect = options.connect == "true";
-  } else {
-    connect = options.connect ? true : false;
+  let database: string | null = null;
+  if (typeof options.connect == "string" && options.connect != "") {
+    database = options.connect;
   }
-
+  if (database != null) {
+    console.log("Run for database:", database);
+  }
   if (!fs.existsSync(file)) {
     console.error("SKStore example file does not exists.");
     return;
@@ -610,9 +671,9 @@ export async function main(createSKStore: typeof CreateSKStore) {
       case "io":
         await start(
           createSKStore,
-          new IOInputService(storage.scenarios(), isKeyValue),
+          new IOInputService(storage.scenarios(), isKeyValue, database),
           storage,
-          connect,
+          database,
         );
         break;
       case "socket":
@@ -620,16 +681,87 @@ export async function main(createSKStore: typeof CreateSKStore) {
           createSKStore,
           new SocketServerService(parseInt(options.port)),
           storage,
-          connect,
+          database,
         );
         break;
       case "noop":
       default:
-        await start(createSKStore, new NoopService(), storage, connect);
+        await start(createSKStore, new NoopService(), storage, database);
         break;
     }
   } catch (e: any) {
     console.error("Invalid SKStore example file.");
-    console.error("\t" + e.message);
+    console.error(e);
+    process.exit(2);
   }
+}
+
+function postInsert(
+  database: string,
+  table: string,
+  values: TJSON[][],
+  hostname: string = "localhost",
+  port: number = 3586,
+): void {
+  var options = {
+    hostname,
+    port,
+    path: `/dbs/${database}/insert`,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  };
+  var req = http.request(options, function (res) {
+    res.on("error", function (e) {
+      console.error(e);
+    });
+  });
+  req.on("error", function (e) {
+    console.error(e);
+  });
+  const data = [
+    {
+      name: table,
+      values: values.map((v) => {
+        return { key: v[0], value: v[1] };
+      }),
+    },
+  ];
+  req.write(JSON.stringify(data));
+  req.end();
+}
+
+function postDelete(
+  database: string,
+  table: string,
+  toDelete: ToDelete[],
+  hostname: string = "localhost",
+  port: number = 3586,
+): void {
+  var options = {
+    hostname,
+    port,
+    path: `/dbs/${database}/delete`,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  };
+  var req = http.request(options, function (res) {
+    res.on("error", function (e) {
+      console.error(e);
+    });
+  });
+  req.on("error", function (e) {
+    console.error(e);
+  });
+  const data = [
+    {
+      name: table,
+      values: toDelete,
+    },
+  ];
+  req.write(JSON.stringify(data));
+  req.end();
 }

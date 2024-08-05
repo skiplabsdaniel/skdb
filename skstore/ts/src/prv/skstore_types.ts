@@ -107,7 +107,7 @@ export interface Context {
   ) => string;
 
   noref: () => Context;
-  notify?: () => void;
+  toggleConnected: () => void;
 }
 
 export interface Handles {
@@ -142,7 +142,13 @@ export interface FromWasm {
 
   SKIP_SKStore_size(ctx: ptr, eagerHdl: ptr): number;
 
-  SKIP_SKStore_toSkdb(ctx: ptr, eagerHdl: ptr, table: ptr, fnPtr: int): void;
+  SKIP_SKStore_toSkdb(
+    ctx: ptr,
+    eagerHdl: ptr,
+    table: ptr,
+    fnPtr: int,
+    connected: boolean,
+  ): void;
 
   // NonEmptyIterator
   SKIP_SKStore_iteratorNext(it: ptr): Opt<ptr>;
