@@ -1152,6 +1152,14 @@ mutable class Compiler{
       | (CSExpr(s1), CGNull(), CSExpr(s3)) -> CIExpr(CSBetween(s1, CNull(), s3))
       | (CSExpr(s1), CSExpr(s2), CGNull()) -> CIExpr(CSBetween(s1, s2, CNull()))
 
+      | (CJExpr(s1), CJExpr(s2), CJExpr(s3)) -> CIExpr(CJBetween(s1, s2, s3))
+      | (CJExpr(s1), CSExpr(s2), CSExpr(s3)) ->
+        CIExpr(CJBetween(s1, CJJSON(s2), CJJSON(s3)))
+      | (CJExpr(s1), CJExpr(s2), CSExpr(s3)) ->
+        CIExpr(CJBetween(s1, s2, CJJSON(s3)))
+      | (CJExpr(s1), CSExpr(s2), CJExpr(s3)) ->
+        CIExpr(CJBetween(s1, CJJSON(s2), s3))
+
       | _ -> error(this.pos, "Type error: BETWEEN")
       }
 
@@ -1181,6 +1189,14 @@ mutable class Compiler{
         CIExpr(CSNotBetween(s1, CNull(), s3))
       | (CSExpr(s1), CSExpr(s2), CGNull()) ->
         CIExpr(CSNotBetween(s1, s2, CNull()))
+
+      | (CJExpr(s1), CJExpr(s2), CJExpr(s3)) -> CIExpr(CJNotBetween(s1, s2, s3))
+      | (CJExpr(s1), CSExpr(s2), CSExpr(s3)) ->
+        CIExpr(CJNotBetween(s1, CJJSON(s2), CJJSON(s3)))
+      | (CJExpr(s1), CJExpr(s2), CSExpr(s3)) ->
+        CIExpr(CJNotBetween(s1, s2, CJJSON(s3)))
+      | (CJExpr(s1), CSExpr(s2), CJExpr(s3)) ->
+        CIExpr(CJNotBetween(s1, CJJSON(s2), s3))
 
       | _ -> error(this.pos, "Type error: NOT BETWEEN")
       }
@@ -1270,7 +1286,6 @@ mutable class Compiler{
     | P.In(e, P.InList(arr), false) ->
       this.compileExpr(context, e) match {
       | CGNull() -> CGNull()
-      | CJExpr _ -> error(this.pos, "Cannot use 'IN' on a JSON")
       | CTExpr _ -> error(this.pos, "Cannot use 'IN' on a SCHEMA")
       | CIExpr(i) ->
         set = arr.map(x ->
@@ -1298,6 +1313,16 @@ mutable class Compiler{
           }
         );
         CIExpr(CSIn(s, set))
+
+      | CJExpr(j) ->
+        set = arr.map(x ->
+          this.compileExpr(context, x) match {
+          | CSExpr(n) -> CJJSON(n)
+          | CJExpr(n) -> n
+          | _ -> error(this.pos, "Incompatible types: IN")
+          }
+        );
+        CIExpr(CJIn(j, set))
       }
 
     | P.UnOp(P.UnaryNot(), e) ->
@@ -1791,6 +1816,22 @@ mutable class Compiler{
         | _ -> error(this.pos, "LENGTH expects a string argument")
         }
 
+      | "json_get" ->
+        if (args.size() != 2) {
+          error(this.pos, "JSON_GET expects 2 arguments");
+        };
+        (
+          this.compileExpr(context, args[0]),
+          this.compileExpr(context, args[1]),
+        ) match {
+        | (CGNull(), CGNull()) -> CGNull()
+        | (CJExpr(e1), CSExpr(e2)) -> CJExpr(CJSONGet(e1, e2))
+        | _ ->
+          error(
+            this.pos,
+            "Invalid arguments for JSON_GET, expected a JSON and a TEXT",
+          )
+        }
       | _ -> error(this.pos, `Unknown function: ${fname}`)
       }
 
@@ -1902,6 +1943,20 @@ mutable class Compiler{
 
     | (CIExpr(e1), CIExpr(e2), P.OAnd()) -> CIExpr(CAnd(e1, e2))
     | (CSExpr(e1), CSExpr(e2), P.OConcat()) -> CSExpr(CSConcat(e1, e2))
+
+    | (CJExpr(e1), CJExpr(e2), P.OLt()) -> CIExpr(CJLt(e1, e2))
+    | (CJExpr(e1), CJExpr(e2), P.OLtEq()) -> CIExpr(CJLte(e1, e2))
+    | (CJExpr(e1), CJExpr(e2), P.OGtEq()) -> CIExpr(CJGte(e1, e2))
+    | (CJExpr(e1), CJExpr(e2), P.OGt()) -> CIExpr(CJGt(e1, e2))
+    | (CJExpr(e1), CJExpr(e2), P.OEq()) -> CIExpr(CJEq(e1, e2))
+    | (CJExpr(e1), CJExpr(e2), P.ONeq()) -> CIExpr(CJDiff(e1, e2))
+
+    | (CJExpr(e1), CSExpr(e2), P.OLt()) -> CIExpr(CJLt(e1, CJJSON(e2)))
+    | (CJExpr(e1), CSExpr(e2), P.OLtEq()) -> CIExpr(CJLte(e1, CJJSON(e2)))
+    | (CJExpr(e1), CSExpr(e2), P.OGtEq()) -> CIExpr(CJGte(e1, CJJSON(e2)))
+    | (CJExpr(e1), CSExpr(e2), P.OGt()) -> CIExpr(CJGt(e1, CJJSON(e2)))
+    | (CJExpr(e1), CSExpr(e2), P.OEq()) -> CIExpr(CJEq(e1, CJJSON(e2)))
+    | (CJExpr(e1), CSExpr(e2), P.ONeq()) -> CIExpr(CJDiff(e1, CJJSON(e2)))
 
     | _ -> error(this.pos, "Incompatible types: " + op)
     }

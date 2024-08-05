@@ -134,4 +134,130 @@ fun decode(
   JSON.genericDecode(str, mutable CJSONBuilder{internFieldNames})
 }
 
+fun getValue(obj: CJObject, field: String): ?CJSON {
+  obj match {
+  | CJObject(fields) ->
+    start = 0;
+    end = fields.cols.size() - 1;
+    while (start <= end) {
+      idx = (start + end) / 2;
+      fields.cols[idx].compare(field) match {
+      | EQ() -> break Some(fields.values[idx])
+      | LT() -> !start = idx + 1
+      | GT() -> !end = idx - 1
+      }
+    } else {
+      None()
+    }
+  }
+}
+
+fun getForPath(value: CJSON, path: String): ?CJSON {
+  chars = path.chars();
+  if (chars.isEmpty() || chars[0] != '$') return None();
+  if (chars.size() == 1) return Some(value);
+  current = value;
+  offset = 1;
+  array: ?Bool = None();
+  buffer = mutable Vector[];
+  index = -1;
+  complete = () ->
+    if (!buffer.isEmpty()) {
+      field = String::fromChars(buffer.toArray());
+      buffer.clear();
+      current match {
+      | o @ CJObject _ -> getValue(o, field)
+      | _ -> None()
+      };
+    } else {
+      None()
+    };
+  while (offset < chars.size()) {
+    c = chars[offset];
+    array match {
+    | Some(true) ->
+      // [...]
+      if (c == ']') {
+        current match {
+        | CJArray(values) -> values.maybeGet(index)
+        | _ -> None()
+        } match {
+        | Some(v) -> !current = v
+        | _ -> return None()
+        };
+        !array = None();
+        !index = -1;
+      } else if (Chars.isDigit(c)) {
+        digitValue = Chars.hexDigitToInt(c);
+        !index = if (index == -1) {
+          digitValue
+        } else {
+          (index * 10) + digitValue
+        };
+      } else {
+        return None()
+      }
+    | Some(false) ->
+      // .
+      c match {
+      | '[' ->
+        complete() match {
+        | Some(v) -> !current = v
+        | _ -> return None()
+        };
+        current match {
+        | CJArray _ -> void
+        | _ ->
+          return None()
+        };
+        !array = Some(true);
+        !index = -1
+      | '.' ->
+        complete() match {
+        | Some(v) -> !current = v
+        | _ -> return None()
+        };
+        current match {
+        | CJObject _ -> void
+        | _ -> return None()
+        };
+        !array = Some(false);
+        buffer.clear()
+      | _ -> buffer.push(c)
+      }
+    | None() ->
+      c match {
+      | '[' ->
+        current match {
+        | CJArray _ -> void
+        | _ ->
+          return None()
+        };
+        !array = Some(true);
+        !index = -1
+      | '.' ->
+        current match {
+        | CJObject _ -> void
+        | _ -> return None()
+        };
+        !array = Some(false);
+        buffer.clear()
+      | _ -> return None()
+      }
+    };
+    !offset = offset + 1
+  };
+  if (!buffer.isEmpty()) {
+    field = String::fromChars(buffer.toArray());
+    current match {
+    | o @ CJObject _ -> getValue(o, field)
+    | _ -> None()
+    };
+  } else if (array.isSome()) {
+    None()
+  } else {
+    Some(current)
+  }
+}
+
 module end;

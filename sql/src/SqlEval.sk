@@ -1637,8 +1637,15 @@ class Evaluator{options: Options, user: ?UserFile} {
         if (hasPrimary) {
           error(pos, "multiple primary keys detected");
         };
-        if (!(tyDescr.ty is P.INTEGER()) && !(tyDescr.ty is P.TEXT())) {
-          error(pos, "primary keys are expected to be integers or strings");
+        if (
+          !(tyDescr.ty is P.INTEGER()) &&
+          !(tyDescr.ty is P.TEXT()) &&
+          !(tyDescr.ty is P.JSON())
+        ) {
+          error(
+            pos,
+            "primary keys are expected to be integers, strings or jsons",
+          );
         };
         !hasPrimary = true;
       };
