@@ -303,7 +303,7 @@ class NonEmptyIteratorImpl<T> implements NonEmptyIterator<T> {
   }
 
   next: () => Opt<T> = () => {
-    return this.skjson.importOptJSON(
+    return this.skjson.importJSON(
       this.exports.SKIP_SKStore_iteratorNext(this.pointer),
     );
   };
@@ -315,7 +315,7 @@ class NonEmptyIteratorImpl<T> implements NonEmptyIterator<T> {
   };
 
   uniqueValue: () => Opt<T> = () => {
-    const jsObj = this.skjson.importOptJSON(
+    const jsObj = this.skjson.importJSON(
       this.exports.SKIP_SKStore_iteratorUniqueValue(this.pointer),
     );
     return jsObj != null ? (jsObj as T) : null;

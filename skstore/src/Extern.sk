@@ -119,14 +119,14 @@ fun iteratorFirst(values: mutable NonEmptyIterator<JSONFile>): SKJSON.CJSON {
 @export("SKIP_SKStore_iteratorUniqueValue")
 fun iteratorUniqueValue(
   values: mutable NonEmptyIterator<JSONFile>,
-): ?SKJSON.CJSON {
-  value = values.next().map(v -> v.value);
-  if (values.next().isSome()) None() else value
+): SKJSON.CJSON {
+  value = iteratorNext(values);
+  if (values.next().isSome()) SKJSON.CJNull() else value
 }
 
 @export("SKIP_SKStore_iteratorNext")
-fun iteratorNext(values: mutable NonEmptyIterator<JSONFile>): ?SKJSON.CJSON {
-  values.next().map(v -> v.value)
+fun iteratorNext(values: mutable NonEmptyIterator<JSONFile>): SKJSON.CJSON {
+  values.next().map(v -> v.value).default(SKJSON.CJNull())
 }
 
 class FnHandle private (eptr: SKStore.ExternalPointer) extends File {
