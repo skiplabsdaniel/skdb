@@ -145,8 +145,8 @@ export interface FromWasm {
   SKIP_SKStore_toSkdb(ctx: ptr, eagerHdl: ptr, table: ptr, fnPtr: int): void;
 
   // NonEmptyIterator
-  SKIP_SKStore_iteratorNext(it: ptr): Opt<ptr>;
-  SKIP_SKStore_iteratorUniqueValue(it: ptr): Opt<ptr>;
+  SKIP_SKStore_iteratorNext(it: ptr): ptr;
+  SKIP_SKStore_iteratorUniqueValue(it: ptr): ptr;
   SKIP_SKStore_iteratorFirst(it: ptr): ptr;
   // Writer
   SKIP_SKStore_writerSet(writer: ptr, key: ptr, value: ptr): void;
