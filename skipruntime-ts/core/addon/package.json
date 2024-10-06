@@ -1,0 +1,13 @@
+{
+  "name": "@skipruntime/addon",
+  "version": "1.0.0",
+  "private": true,
+  "gypfile": true,
+  "type": "module",
+  "scripts": {
+    "build": "skargo build -r --lib --manifest-path=../core/native/Skargo.toml --out-dir=/home/parallels/skip-runtime/ && npm i"
+  },
+  "dependencies": {
+    "nan": "^2.20.0"
+  }
+}
