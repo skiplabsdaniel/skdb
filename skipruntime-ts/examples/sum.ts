@@ -4,9 +4,8 @@ import type {
   EagerCollection,
   NonEmptyIterator,
   SkipService,
-  Resource,
 } from "@skipruntime/core";
-
+import { Resource } from "@skipruntime/core";
 import { runService } from "@skipruntime/server";
 
 class Plus implements Mapper<string, number, string, number> {
@@ -30,7 +29,7 @@ class Minus implements Mapper<string, number, string, number> {
   }
 }
 
-class Add implements Resource {
+class Add extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {
@@ -42,7 +41,7 @@ class Add implements Resource {
   }
 }
 
-class Sub implements Resource {
+class Sub extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {

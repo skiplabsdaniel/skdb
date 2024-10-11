@@ -10,11 +10,15 @@ import type {
   LazyCollection,
   NonEmptyIterator,
   SkipService,
-  Resource,
   Entry,
   ExternalSupplier,
 } from "../src/skip-runtime.js";
-import { Sum, ValueMapper, initService } from "../src/skip-runtime.js";
+import {
+  Sum,
+  ValueMapper,
+  initService,
+  Resource,
+} from "../src/skip-runtime.js";
 import { TimeCollection, ExternalService } from "../src/skipruntime_helpers.js";
 
 //// testMap1
@@ -28,7 +32,7 @@ class Map1 implements Mapper<string, number, string, number> {
   }
 }
 
-class Map1Resource implements Resource {
+class Map1Resource extends Resource {
   reactiveCompute(
     _context: Context,
     collections: {
@@ -78,7 +82,7 @@ class Map2 implements Mapper<string, number, string, number> {
   }
 }
 
-class Map2Resource implements Resource {
+class Map2Resource extends Resource {
   reactiveCompute(
     _context: Context,
     collections: {
@@ -130,7 +134,7 @@ class Map3 implements Mapper<string, number, string, number> {
   }
 }
 
-class Map3Resource implements Resource {
+class Map3Resource extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {
@@ -185,7 +189,7 @@ class AddKeyAndValue extends ValueMapper<number, number, number> {
   }
 }
 
-class ValueMapperResource implements Resource {
+class ValueMapperResource extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {
@@ -240,7 +244,7 @@ class SizeMapper implements Mapper<number, number, number, number> {
   }
 }
 
-class SizeResource implements Resource {
+class SizeResource extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {
@@ -295,7 +299,7 @@ it("testSize", async () => {
 
 //// testSlicedMap1
 
-class SlicedMap1Resource implements Resource {
+class SlicedMap1Resource extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {
@@ -378,7 +382,7 @@ class MapLazy implements Mapper<number, number, number, number> {
   }
 }
 
-class LazyResource implements Resource {
+class LazyResource extends Resource {
   reactiveCompute(
     context: Context,
     cs: {
@@ -439,7 +443,7 @@ class TestOddEven implements Mapper<number, number, number, number> {
   }
 }
 
-class MapReduceResource implements Resource {
+class MapReduceResource extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {
@@ -499,7 +503,7 @@ it("testMapReduce", async () => {
 
 //// testMerge1
 
-class Merge1Resource implements Resource {
+class Merge1Resource extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {
@@ -560,7 +564,7 @@ class IdentityMapper extends ValueMapper<number, number, number> {
   }
 }
 
-class MergeReduceResource implements Resource {
+class MergeReduceResource extends Resource {
   reactiveCompute(
     _context: Context,
     cs: {
@@ -624,7 +628,7 @@ class JSONExtract
   }
 }
 
-class JSONExtractResource implements Resource {
+class JSONExtractResource extends Resource {
   reactiveCompute(
     context: Context,
     cs: {
@@ -770,7 +774,7 @@ class ExternalCheck implements Mapper<number, number, number, number[]> {
   }
 }
 
-class ExternalResource implements Resource {
+class ExternalResource extends Resource {
   reactiveCompute(
     context: Context,
     cs: {
@@ -848,7 +852,7 @@ it("testExternal", async () => {
 
 //// testCloseSession
 
-class TokensResource implements Resource {
+class TokensResource extends Resource {
   reactiveCompute(
     context: Context,
     _cs: Record<string, EagerCollection<TJSON, TJSON>>,
@@ -863,7 +867,6 @@ class TokensResource implements Resource {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-call
 const system = new ExternalService({ timer: new TimeCollection() });
 
 class TokensService implements SkipService {

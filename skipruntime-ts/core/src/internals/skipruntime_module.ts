@@ -25,7 +25,6 @@ import type {
   Context,
   LazyCompute,
   ExternalSupplier,
-  Resource,
   SkipRuntime,
   ReactiveResponse,
   CollectionUpdate,
@@ -35,6 +34,7 @@ import type {
 
 import type { SKJSON } from "skjson";
 import { UnknownCollectionError } from "../skipruntime_errors.js";
+import { Resource } from "../skipruntime_api.js";
 
 export type Handle<T> = Internal.Opaque<int, { handle_for: T }>;
 

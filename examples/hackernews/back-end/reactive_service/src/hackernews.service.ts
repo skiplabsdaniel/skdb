@@ -5,8 +5,8 @@ import type {
   EagerCollection,
   NonEmptyIterator,
   SkipService,
-  Resource,
 } from "@skipruntime/core";
+import { Resource } from "@skipruntime/core";
 
 type Post = {
   author_id: number;
@@ -104,10 +104,11 @@ class SortingMapper {
   }
 }
 
-class PostsResource implements Resource {
+class PostsResource extends Resource {
   private limit: number;
 
   constructor(params: Record<string, string>) {
+    super(params);
     this.limit = Number(params["limit"]);
   }
 

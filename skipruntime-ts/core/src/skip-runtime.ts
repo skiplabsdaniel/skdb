@@ -15,7 +15,6 @@ export type {
   Entry,
   ReactiveResponse,
   SkipService,
-  Resource,
   ExternalSupplier,
   CollectionUpdate,
   Watermark,
@@ -23,7 +22,7 @@ export type {
 } from "./skipruntime_api.js";
 
 export { UnknownCollectionError } from "./skipruntime_errors.js";
-export { ValueMapper } from "./skipruntime_api.js";
+export { ValueMapper, Resource } from "./skipruntime_api.js";
 export {
   Sum,
   Min,

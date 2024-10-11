@@ -7,8 +7,8 @@ import type {
   NonEmptyIterator,
   TJSON,
   SkipService,
-  Resource,
 } from "@skipruntime/core";
+import { Resource } from "@skipruntime/core";
 
 import { runService } from "@skipruntime/server";
 
@@ -68,7 +68,7 @@ class CallCompute implements Mapper<string, TJSON, string, TJSON> {
   }
 }
 
-class ComputedCells implements Resource {
+class ComputedCells extends Resource {
   reactiveCompute(
     _context: Context,
     collections: { output: EagerCollection<string, TJSON> },
