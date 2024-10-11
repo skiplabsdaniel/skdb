@@ -10,12 +10,11 @@ import type {
   LazyCollection,
   NonEmptyIterator,
   SkipService,
-  Resource,
   Entry,
   ExternalService,
   ReactiveResponse,
 } from "@skipruntime/api";
-import { OneToOneMapper } from "@skipruntime/api";
+import { OneToOneMapper, Resource } from "@skipruntime/api";
 import { Sum } from "@skipruntime/helpers";
 import {
   TimerResource,
@@ -61,7 +60,7 @@ class Map1 implements Mapper<string, number, string, number> {
   }
 }
 
-class Map1Resource implements Resource {
+class Map1Resource extends Resource {
   reactiveCompute(collections: {
     input: EagerCollection<string, number>;
   }): EagerCollection<string, number> {
@@ -100,7 +99,7 @@ class Map2 implements Mapper<string, number, string, number> {
   }
 }
 
-class Map2Resource implements Resource {
+class Map2Resource extends Resource {
   reactiveCompute(collections: {
     input1: EagerCollection<string, number>;
     input2: EagerCollection<string, number>;
@@ -132,7 +131,7 @@ class Map3 implements Mapper<string, number, string, number> {
   }
 }
 
-class Map3Resource implements Resource {
+class Map3Resource extends Resource {
   reactiveCompute(cs: {
     input1: EagerCollection<string, number>;
     input2: EagerCollection<string, number>;
@@ -167,7 +166,7 @@ class AddKeyAndValue extends OneToOneMapper<number, number, number> {
   }
 }
 
-class OneToOneMapperResource implements Resource {
+class OneToOneMapperResource extends Resource {
   reactiveCompute(cs: {
     input: EagerCollection<number, number>;
   }): EagerCollection<number, number> {
@@ -199,7 +198,7 @@ class SizeMapper implements Mapper<number, number, number, number> {
   }
 }
 
-class SizeResource implements Resource {
+class SizeResource extends Resource {
   reactiveCompute(cs: {
     input1: EagerCollection<number, number>;
     input2: EagerCollection<number, number>;
@@ -222,7 +221,7 @@ class SizeService implements SkipService {
 
 //// testSlicedMap1
 
-class SlicedMap1Resource implements Resource {
+class SlicedMap1Resource extends Resource {
   reactiveCompute(cs: {
     input: EagerCollection<number, number>;
   }): EagerCollection<number, number> {
@@ -280,7 +279,7 @@ class MapLazy implements Mapper<number, number, number, number> {
   }
 }
 
-class LazyResource implements Resource {
+class LazyResource extends Resource {
   reactiveCompute(
     cs: {
       input: EagerCollection<number, number>;
@@ -314,7 +313,7 @@ class TestOddEven implements Mapper<number, number, number, number> {
   }
 }
 
-class MapReduceResource implements Resource {
+class MapReduceResource extends Resource {
   reactiveCompute(cs: {
     input: EagerCollection<number, number>;
   }): EagerCollection<number, number> {
@@ -335,7 +334,7 @@ class MapReduceService implements SkipService {
 
 //// testMerge1
 
-class Merge1Resource implements Resource {
+class Merge1Resource extends Resource {
   reactiveCompute(cs: {
     input1: EagerCollection<number, number>;
     input2: EagerCollection<number, number>;
@@ -371,7 +370,7 @@ class IdentityMapper extends OneToOneMapper<number, number, number> {
   }
 }
 
-class MergeReduceResource implements Resource {
+class MergeReduceResource extends Resource {
   reactiveCompute(cs: {
     input1: EagerCollection<number, number>;
     input2: EagerCollection<number, number>;
@@ -410,7 +409,7 @@ class JSONExtract
   }
 }
 
-class JSONExtractResource implements Resource {
+class JSONExtractResource extends Resource {
   reactiveCompute(
     cs: {
       input: EagerCollection<number, { value: JsonObject; pattern: string }>;
@@ -500,7 +499,7 @@ class MockExternalCheck implements Mapper<number, number, number, number[]> {
   }
 }
 
-class MockExternalResource implements Resource {
+class MockExternalResource extends Resource {
   reactiveCompute(
     cs: {
       input1: EagerCollection<number, number>;
@@ -536,7 +535,7 @@ class TestExternalService implements SkipService {
 
 //// testCloseSession
 
-class TokensResource implements Resource {
+class TokensResource extends Resource {
   reactiveCompute(
     _cs: Record<string, EagerCollection<Json, Json>>,
     context: Context,
@@ -565,7 +564,7 @@ class TokensService implements SkipService {
 
 //// testMultipleResources
 
-class Resource1 implements Resource {
+class Resource1 extends Resource {
   reactiveCompute(collections: {
     input1: EagerCollection<string, number>;
   }): EagerCollection<string, number> {
@@ -573,7 +572,7 @@ class Resource1 implements Resource {
   }
 }
 
-class Resource2 implements Resource {
+class Resource2 extends Resource {
   reactiveCompute(collections: {
     input2: EagerCollection<string, number>;
   }): EagerCollection<string, number> {

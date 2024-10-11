@@ -5,11 +5,8 @@ import type {
   LazyCollection,
   Json,
   SkipService,
-  Resource,
 } from "@skipruntime/api";
-
-import { OneToOneMapper } from "@skipruntime/api";
-
+import { Resource, OneToOneMapper } from "@skipruntime/api";
 import { runService } from "@skipruntime/server";
 
 class ComputeExpression implements LazyCompute<string, string> {
@@ -64,7 +61,7 @@ class CallCompute extends OneToOneMapper<string, Json, Json> {
   }
 }
 
-class ComputedCells implements Resource {
+class ComputedCells extends Resource {
   reactiveCompute(collections: {
     output: EagerCollection<string, Json>;
   }): EagerCollection<string, Json> {

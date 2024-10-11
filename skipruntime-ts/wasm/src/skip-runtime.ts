@@ -14,7 +14,6 @@ export type {
   Entry,
   ReactiveResponse,
   SkipService,
-  Resource,
   ExternalService,
   CollectionUpdate,
   Watermark,
@@ -26,7 +25,7 @@ export type {
   ServiceInstance,
 } from "./internals/skipruntime_module.js";
 export { UnknownCollectionError } from "@skipruntime/helpers/errors.js";
-export { OneToOneMapper, ManyToOneMapper } from "@skipruntime/api";
+export { OneToOneMapper, ManyToOneMapper, Resource } from "@skipruntime/api";
 export { freeze } from "./internals/skipruntime_module.js";
 export {
   Sum,

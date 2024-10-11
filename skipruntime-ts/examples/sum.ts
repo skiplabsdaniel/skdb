@@ -2,11 +2,8 @@ import type {
   EagerCollection,
   NonEmptyIterator,
   SkipService,
-  Resource,
 } from "@skipruntime/api";
-
-import { ManyToOneMapper } from "@skipruntime/api";
-
+import { Resource, ManyToOneMapper } from "@skipruntime/api";
 import { runService } from "@skipruntime/server";
 
 class Plus extends ManyToOneMapper<string, number, number> {
@@ -24,7 +21,7 @@ class Minus extends ManyToOneMapper<string, number, number> {
   }
 }
 
-class Add implements Resource {
+class Add extends Resource {
   reactiveCompute(cs: {
     input1: EagerCollection<string, number>;
     input2: EagerCollection<string, number>;
@@ -33,7 +30,7 @@ class Add implements Resource {
   }
 }
 
-class Sub implements Resource {
+class Sub extends Resource {
   reactiveCompute(cs: {
     input1: EagerCollection<string, number>;
     input2: EagerCollection<string, number>;

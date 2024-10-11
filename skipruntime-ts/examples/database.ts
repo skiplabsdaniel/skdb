@@ -1,9 +1,5 @@
-import type {
-  EagerCollection,
-  SkipService,
-  Resource,
-  Entry,
-} from "@skipruntime/api";
+import type { EagerCollection, SkipService, Entry } from "@skipruntime/api";
+import { Resource } from "@skipruntime/api";
 
 import { runService } from "@skipruntime/server";
 
@@ -74,7 +70,7 @@ async function initDB(): Promise<sqlite3.Database> {
 
 type User = { name: string; country: string };
 
-class UsersResource implements Resource {
+class UsersResource extends Resource {
   reactiveCompute(cs: {
     users: EagerCollection<string, User>;
   }): EagerCollection<string, User> {

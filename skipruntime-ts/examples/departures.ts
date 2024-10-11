@@ -1,9 +1,5 @@
-import type {
-  SkipService,
-  EagerCollection,
-  Context,
-  Resource,
-} from "@skipruntime/api";
+import type { SkipService, EagerCollection, Context } from "@skipruntime/api";
+import { Resource } from "@skipruntime/api";
 import { runService } from "@skipruntime/server";
 import { GenericExternalService, Polled } from "@skipruntime/helpers";
 
@@ -22,7 +18,7 @@ type Result = {
   results: Departure[];
 };
 
-class DeparturesResource implements Resource {
+class DeparturesResource extends Resource {
   reactiveCompute(
     cs: { config: EagerCollection<string, (string | number)[]> },
     context: Context,

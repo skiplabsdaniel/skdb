@@ -25,13 +25,12 @@ import type {
   Context,
   LazyCompute,
   ExternalService,
-  Resource,
   ReactiveResponse,
   CollectionUpdate,
   Watermark,
   SubscriptionID,
 } from "@skipruntime/api";
-
+import { Resource } from "@skipruntime/api";
 import { Frozen, type Constant } from "@skipruntime/api/internals.js";
 
 import type { Exportable, SKJSON } from "@skip-wasm/json";
