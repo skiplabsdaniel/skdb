@@ -5,9 +5,8 @@ import type {
   EagerCollection,
   NonEmptyIterator,
   SkipService,
-  Resource,
 } from "@skipruntime/core";
-import { ExternalSkipService } from "@skipruntime/core";
+import { ExternalSkipService, Resource } from "@skipruntime/core";
 
 import { runService } from "@skipruntime/server";
 
@@ -21,7 +20,7 @@ class Mult implements Mapper<string, number, string, number> {
   }
 }
 
-class MultResource implements Resource {
+class MultResource extends Resource {
   reactiveCompute(
     context: Context,
     _collections: Record<string, EagerCollection<TJSON, TJSON>>,

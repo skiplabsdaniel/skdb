@@ -4,9 +4,8 @@ import type {
   EagerCollection,
   NonEmptyIterator,
   SkipService,
-  Resource,
 } from "@skipruntime/core";
-
+import { Resource } from "@skipruntime/core";
 import { runService } from "@skipruntime/server";
 
 type Post = {
@@ -90,10 +89,11 @@ class PostsCleanupKeyMapper {
   }
 }
 
-class PostsResource implements Resource {
+class PostsResource extends Resource {
   private limit: number;
 
   constructor(params: Record<string, string>) {
+    super(params);
     console.log(params["limit"]);
     this.limit = Number(params["limit"]);
   }

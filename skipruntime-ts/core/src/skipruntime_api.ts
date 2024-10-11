@@ -436,14 +436,15 @@ export interface ExternalSupplier {
 /**
  * A Resource allows to supply a SkipService reactive resource
  */
-export interface Resource {
+export abstract class Resource {
+  constructor(protected params: Record<string, string>) {}
   /**
    * Build a reactive compute graph of the reactive ressource
    * @param context {Context} - the reactive graph context
    * @param collections - the collection returned by SkipService reactiveCompute
    * @param reactiveAuth - the client user Skip session authentification
    */
-  reactiveCompute(
+  abstract reactiveCompute(
     context: Context,
     collections: Record<string, EagerCollection<TJSON, TJSON>>,
     reactiveAuth?: Uint8Array,
