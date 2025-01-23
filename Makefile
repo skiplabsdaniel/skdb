@@ -72,7 +72,7 @@ check:
 
 .PHONY: check-ts
 check-ts:
-	SKIPRUNTIME=$(CURDIR)/build/skipruntime npm install
+	npm install
 	bin/check-ts.sh
 
 .PHONY: clean
@@ -111,7 +111,7 @@ check-fmt: fmt
 # regenerate api docs served by docs-run from ts sources
 .PHONY: docs
 docs:
-	SKIPRUNTIME=$(CURDIR)/build/skipruntime npm install && npm run build
+	npm install && npm run build
 	cd www && npm install && npx docusaurus generate-typedoc
 
 # run the docs site locally at http://localhost:3000
@@ -242,31 +242,6 @@ skfmt-%:
 skbuild-%:
 	cd $* && skargo b --profile $(SKARGO_PROFILE)
 
-.PHONY: publish-std-binding
-publish-std-binding:
-	bin/release_npm.sh @skiplang/std skiplang/prelude/ts/binding/package.json $(OPT)
-
-.PHONY: publish-std-wasm
-publish-std-wasm:
-	bin/release_npm.sh @skip-wasm/std skiplang/prelude/ts/wasm/package.json $(OPT)
-
-.PHONY: publish-std
-publish-std: publish-std-binding publish-std-wasm
-
-.PHONY: publish-json-binding
-publish-json-binding:
-	bin/release_npm.sh @skiplang/json skiplang/skjson/ts/binding/package.json $(OPT)
-
-.PHONY: publish-json-wasm
-publish-json-wasm:
-	bin/release_npm.sh @skip-wasm/json skiplang/skjson/ts/wasm/package.json $(OPT)
-
-.PHONY: publish-json
-publish-json: publish-json-binding publish-json-wasm
-
-.PHONY: publish-date
-publish-date:
-	bin/release_npm.sh @skip-wasm/date skiplang/skdate/ts/package.json $(OPT)
 
 .PHONY: publish-core
 publish-core:
@@ -293,4 +268,4 @@ publish-postgres-adapter:
 	bin/release_npm.sh @skip-adapter/postgres skipruntime-ts/adapters/postgres/package.json $(OPT)
 
 .PHONY: publish-all
-publish-all: clean publish-std publish-json publish-date publish-core publish-helpers publish-wasm publish-native publish-server publish-postgres-adapter
+publish-all: clean publish-core publish-helpers publish-wasm publish-native publish-server publish-postgres-adapter
