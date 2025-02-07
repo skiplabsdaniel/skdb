@@ -19,13 +19,14 @@ import type {
   Watermark,
   EagerCollection,
   LazyCollection,
+  Data,
 } from "@skipruntime/core";
 import {
   JconConverterWithCollections,
   ServiceInstance,
   ToBinding,
   type JSONLazyCompute,
-  type JSONMapper,
+  type DataMapper,
 } from "@skipruntime/core";
 
 import type {
@@ -63,9 +64,9 @@ export interface FromWasm {
   // Mapper
   SkipRuntime_createMapper<
     K1 extends Json,
-    V1 extends Json,
+    V1 extends Json | Data,
     K2 extends Json,
-    V2 extends Json,
+    V2 extends Json | Data,
   >(
     ref: Handle<Mapper<K1, V1, K2, V2>>,
   ): ptr<Internal.Mapper>;
@@ -247,8 +248,8 @@ export interface FromWasm {
 
   // Reducer
 
-  SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(
-    ref: Handle<Reducer<K1, V1>>,
+  SkipRuntime_createReducer<V1 extends Json | Data, V2 extends Json>(
+    ref: Handle<Reducer<V1, V2>>,
     defaultValue: ptr<Internal.CJSON>,
   ): ptr<Internal.Reducer>;
 
@@ -294,12 +295,12 @@ interface ToWasm {
   // Mapper
 
   SkipRuntime_Mapper__mapEntry(
-    mapper: Handle<JSONMapper>,
+    mapper: Handle<DataMapper>,
     key: ptr<Internal.CJSON>,
     values: ptr<Internal.NonEmptyIterator>,
   ): ptr<Internal.CJArray>;
 
-  SkipRuntime_deleteMapper(mapper: Handle<JSONMapper>): void;
+  SkipRuntime_deleteMapper(mapper: Handle<DataMapper>): void;
 
   // LazyCompute
 
@@ -442,9 +443,9 @@ export class WasmFromBinding implements FromBinding {
 
   SkipRuntime_createMapper<
     K1 extends Json,
-    V1 extends Json,
+    V1 extends Json | Data,
     K2 extends Json,
-    V2 extends Json,
+    V2 extends Json | Data,
   >(ref: Handle<Mapper<K1, V1, K2, V2>>): Pointer<Internal.Mapper> {
     return this.fromWasm.SkipRuntime_createMapper(ref);
   }
@@ -768,8 +769,8 @@ export class WasmFromBinding implements FromBinding {
     );
   }
 
-  SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(
-    ref: Handle<Reducer<K1, V1>>,
+  SkipRuntime_createReducer<V1 extends Json | Data, V2 extends Json>(
+    ref: Handle<Reducer<V1, V2>>,
     defaultValue: Pointer<Internal.CJSON>,
   ): Pointer<Internal.Reducer> {
     return this.fromWasm.SkipRuntime_createReducer(ref, toPtr(defaultValue));
@@ -842,12 +843,13 @@ class LinksImpl implements Links {
       utils.runWithGc.bind(utils),
       (
         eagerCollectionBuilder: (
-          object: Exportable<undefined>,
-        ) => EagerCollection<Json, Json>,
+          object: Exportable<never>,
+        ) => EagerCollection<Json, Data>,
         lazyCollectionBuilder: (
-          object: Exportable<undefined>,
+          object: Exportable<never>,
         ) => LazyCollection<Json, Json>,
-      ) =>
+      ) => [
+        defaultConverter,
         defaultConverter.derive(
           new JconConverterWithCollections(
             defaultConverter,
@@ -855,6 +857,7 @@ class LinksImpl implements Links {
             lazyCollectionBuilder,
           ),
         ),
+      ],
       (skExc: Pointer<Internal.Exception>) =>
         this.utils.getErrorObject(toPtr(skExc)),
     );
@@ -887,7 +890,7 @@ class LinksImpl implements Links {
   // Mapper
 
   mapEntryOfMapper(
-    skmapper: Handle<JSONMapper>,
+    skmapper: Handle<DataMapper>,
     key: ptr<Internal.CJSON>,
     values: ptr<Internal.NonEmptyIterator>,
   ): ptr<Internal.CJArray> {
@@ -896,7 +899,7 @@ class LinksImpl implements Links {
     );
   }
 
-  deleteMapper(mapper: Handle<JSONMapper>) {
+  deleteMapper(mapper: Handle<DataMapper>) {
     this.tobinding.SkipRuntime_deleteMapper(mapper);
   }
 
@@ -1004,7 +1007,7 @@ class LinksImpl implements Links {
   // Reducer
 
   addOfReducer(
-    skreducer: Handle<Reducer<Json, Json>>,
+    skreducer: Handle<Reducer<Json | Data, Json>>,
     skacc: ptr<Internal.CJSON>,
     skvalue: ptr<Internal.CJSON>,
   ) {
@@ -1014,7 +1017,7 @@ class LinksImpl implements Links {
   }
 
   removeOfReducer(
-    skreducer: Handle<Reducer<Json, Json>>,
+    skreducer: Handle<Reducer<Json | Data, Json>>,
     skacc: ptr<Internal.CJSON>,
     skvalue: ptr<Internal.CJSON>,
   ) {
@@ -1023,7 +1026,7 @@ class LinksImpl implements Links {
     );
   }
 
-  deleteReducer(reducer: Handle<Reducer<Json, Json>>) {
+  deleteReducer(reducer: Handle<Reducer<Json | Data, Json>>) {
     this.tobinding.SkipRuntime_deleteReducer(reducer);
   }
 

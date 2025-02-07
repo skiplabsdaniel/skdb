@@ -817,4 +817,39 @@ fun getExceptionType(exn: .Exception): String {
   }
 }
 
+class UnknownCJCustomType(type: String) extends Exception {
+  fun getMessage(): String {
+    `Unknown JSON custom type '${this.type}'`
+  }
+}
+
+class InvalidCJCustomObjectForType(type: String) extends Exception {
+  fun getMessage(): String {
+    `Invalid JSON custom object for type '${this.type}'`
+  }
+}
+
+/*** TODO: Not clean, should be in skjson, need to found a way to make it cleanly ***/
+
+@export("SKIP_SKJSON_createCJCustom")
+fun createCJCustom(
+  object: mutable Vector<(String, SKJSON.CJSON)>,
+  type: String,
+): SKJSON.CJCustom {
+  collection = type match {
+  | "SkipRuntime.EagerCollection" | "SkipRuntime.LazyCollection" ->
+    if (
+      object.size() != 1 ||
+      object[0].i0 != "collection" ||
+      object[0].i1 match {
+      | SKJSON.CJString _ -> false
+      | _ -> true
+      }
+    ) throw InvalidCJCustomObjectForType(type);
+    object[0].i0
+  | _ -> throw UnknownCJCustomType(type)
+  };
+  SKJSON.CJCustom(CJCollection(type, collection))
+}
+
 module end;

@@ -23,7 +23,7 @@ import type { SKJSONShared } from "../skipwasm-json/skjson.js";
 import type { JsonConverter as CJConverter } from "../skiplang-json/index.js";
 import type * as InternalJ from "../skiplang-json/internal.js";
 
-type JsonConverter = CJConverter<undefined>;
+type JsonConverter = CJConverter<never>;
 
 interface Exported {
   sk_pop_dirty_page: () => number;

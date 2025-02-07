@@ -175,7 +175,7 @@ export type ObjectProxy<T, Base extends { [k: string]: Exportable<T> }> = {
 
 export interface CustomConverter<T> {
   import(c: CJCustom, value: Pointer<Internal.CJSON>): T | undefined;
-  export(value: T): Internal.CJSON;
+  export(value: T): Pointer<Internal.CJSON>;
 }
 
 export function isObjectProxy<T>(
@@ -377,6 +377,7 @@ class ObjectHandle<T1, T extends Internal.CJSON> {
 export function exportJSON<T>(
   binding: Binding,
   value: Exportable<T>,
+  type?: CJCustom,
 ): Pointer<Internal.CJSON> {
   if (value === null || value === undefined) {
     return binding.SKIP_SKJSON_createCJNull();
@@ -404,7 +405,11 @@ export function exportJSON<T>(
       Object.entries(value).forEach(([key, val]) => {
         binding.SKIP_SKJSON_addToCJObject(obj, key, exportJSON(binding, val));
       });
-      return binding.SKIP_SKJSON_endCJObject(obj);
+      if (type) {
+        return binding.SKIP_SKJSON_createCJCustom(obj, type);
+      } else {
+        return binding.SKIP_SKJSON_endCJObject(obj);
+      }
     }
   } else {
     throw new Error(`'${typeof value}' cannot be exported to wasm.`);
@@ -428,13 +433,14 @@ export interface JsonConverter<T> {
   exportJSON(v: boolean): Pointer<Internal.CJBool>;
   exportJSON(v: string): Pointer<Internal.CJString>;
   exportJSON(v: any[]): Pointer<Internal.CJArray>;
-  exportJSON(v: JsonObject<T>): Pointer<Internal.CJObject>;
+  exportJSON(v: JsonObject<T> | JsonObject<never>): Pointer<Internal.CJObject>;
+  exportJSON(v: JsonObject<T>, type: CJCustom): Pointer<Internal.CJCustom>;
   exportJSON<T extends Internal.CJSON>(
     v: ObjectProxy<T, { [k: string]: Exportable<T> }> & {
       __pointer: Pointer<T>;
     },
   ): Pointer<T>;
-  exportJSON(v: Nullable<Json<T>>): Pointer<Internal.CJSON>;
+  exportJSON(v: Nullable<Json<T>>, type?: CJCustom): Pointer<Internal.CJSON>;
   importOptJSON(
     value: Nullable<Pointer<Internal.CJSON>>,
     copy?: boolean,
@@ -442,6 +448,7 @@ export interface JsonConverter<T> {
   is(v: Pointer<Internal.CJSON>, type: Type): boolean;
   clone<T>(v: T): T;
   derive<T1>(conv: CustomConverter<T1>): JsonConverter<T1>;
+  strict(): JsonConverter<never>;
 }
 
 export class JsonConverterImpl<T> implements JsonConverter<T> {
@@ -454,8 +461,11 @@ export class JsonConverterImpl<T> implements JsonConverter<T> {
     return importJSON(this.binding, value, this.conv, copy);
   }
 
-  exportJSON(v: Exportable<T>): Pointer<Internal.CJSON> {
-    return exportJSON(this.binding, v);
+  exportJSON(
+    v: Exportable<T> | Exportable<never>,
+    type?: CJCustom,
+  ): Pointer<Internal.CJSON> {
+    return exportJSON(this.binding, v, type);
   }
 
   public clone<T>(v: T): T {
@@ -478,6 +488,10 @@ export class JsonConverterImpl<T> implements JsonConverter<T> {
 
   derive<T1>(conv: CustomConverter<T1>): JsonConverter<T1> {
     return new JsonConverterImpl(this.binding, conv);
+  }
+
+  strict(): JsonConverter<never> {
+    return new JsonConverterImpl(this.binding);
   }
 }
 

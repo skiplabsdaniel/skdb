@@ -64,4 +64,8 @@ export interface Binding {
   SKIP_SKJSON_createCJFloat(v: number): Pointer<Internal.CJFloat>;
   SKIP_SKJSON_createCJString(str: string): Pointer<Internal.CJString>;
   SKIP_SKJSON_createCJBool(v: boolean): Pointer<Internal.CJBool>;
+  SKIP_SKJSON_createCJCustom(
+    obj: Pointer<Internal.PartialCJObj>,
+    type: CJCustom,
+  ): Pointer<Internal.CJCustom>;
 }

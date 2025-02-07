@@ -25,6 +25,7 @@ type AddOn = {
 const skip_runtime: AddOn = require("../build/Release/skip_runtime.node");
 
 import type {
+  Data,
   EagerCollection,
   Json,
   LazyCollection,
@@ -32,7 +33,7 @@ import type {
 } from "@skipruntime/core";
 
 const jsonBinding: JsonBinding = skip_runtime.getJsonBinding();
-const jsonConverter = buildJsonConverter<undefined>(jsonBinding);
+const jsonConverter = buildJsonConverter<never>(jsonBinding);
 
 const fromBinding = skip_runtime.getSkipRuntimeFromBinding();
 const tobinding = new ToBinding(
@@ -40,12 +41,13 @@ const tobinding = new ToBinding(
   skip_runtime.runWithGC,
   (
     eagerCollectionBuilder: (
-      object: Exportable<undefined>,
-    ) => EagerCollection<Json, Json>,
+      object: Exportable<never>,
+    ) => EagerCollection<Json, Data>,
     lazyCollectionBuilder: (
-      object: Exportable<undefined>,
+      object: Exportable<never>,
     ) => LazyCollection<Json, Json>,
-  ) =>
+  ) => [
+    jsonConverter,
     jsonConverter.derive(
       new JconConverterWithCollections(
         jsonConverter,
@@ -53,6 +55,7 @@ const tobinding = new ToBinding(
         lazyCollectionBuilder,
       ),
     ),
+  ],
   skip_runtime.getErrorObject,
 );
 
