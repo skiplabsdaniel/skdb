@@ -1,8 +1,13 @@
 import type { Exception as IException } from "@skipruntime/core/internal.js";
-import { ServiceInstance, ToBinding } from "@skipruntime/core";
+import {
+  ServiceInstance,
+  ToBinding,
+  JconConverterWithCollections,
+} from "@skipruntime/core";
 import type { FromBinding as SkipRuntimeFromBinding } from "@skipruntime/core/binding.js";
 import {
   buildJsonConverter,
+  type Exportable,
   type Binding as JsonBinding,
   type Pointer,
 } from "@skipruntime/core/json.js";
@@ -19,15 +24,35 @@ type AddOn = {
 
 const skip_runtime: AddOn = require("../build/Release/skip_runtime.node");
 
-import type { SkipService } from "@skipruntime/core";
+import type {
+  EagerCollection,
+  Json,
+  LazyCollection,
+  SkipService,
+} from "@skipruntime/core";
 
 const jsonBinding: JsonBinding = skip_runtime.getJsonBinding();
-const jsonConverter = buildJsonConverter(jsonBinding);
+const jsonConverter = buildJsonConverter<undefined>(jsonBinding);
+
 const fromBinding = skip_runtime.getSkipRuntimeFromBinding();
 const tobinding = new ToBinding(
   fromBinding,
   skip_runtime.runWithGC,
-  () => jsonConverter,
+  (
+    eagerCollectionBuilder: (
+      object: Exportable<undefined>,
+    ) => EagerCollection<Json, Json>,
+    lazyCollectionBuilder: (
+      object: Exportable<undefined>,
+    ) => LazyCollection<Json, Json>,
+  ) =>
+    jsonConverter.derive(
+      new JconConverterWithCollections(
+        jsonConverter,
+        eagerCollectionBuilder,
+        lazyCollectionBuilder,
+      ),
+    ),
   skip_runtime.getErrorObject,
 );
 

@@ -6,6 +6,16 @@ module SKJSON;
 /*****************************************************************************/
 
 base class CJSON uses Orderable {
+  fun toJSON(): JSON.Value;
+
+  fun toType(): SKJSON.Type;
+
+  fun prettyPrint(): String {
+    this.toJSON().toString()
+  }
+}
+
+base class CJSONStrict extends CJSON {
   children =
   | CJNull()
   | CJBool(Bool)
@@ -29,10 +39,6 @@ base class CJSON uses Orderable {
       map![fieldName] = field.toJSON();
     };
     JSON.Object(map.chill())
-
-  fun prettyPrint(): String {
-    this.toJSON().toString()
-  }
 
   fun toType(): SKJSON.Type {
     SKJSON.Type::create(this.toSType())
@@ -59,6 +65,21 @@ base class CJSON uses Orderable {
       result![i] = SKJSON.Field(fieldName, fieldCount, field.toType());
     };
     SKJSON.TObject(SKJSON.Fields::create(result.chill()))
+}
+
+base class CJSONable uses Orderable {
+  fun typeName(): String;
+  fun toCJSON(): CJObject;
+}
+
+class CJCustom(value: CJSONable) extends CJSON {
+  fun toJSON(): JSON.Value {
+    this.value.toCJSON().toJSON();
+  }
+
+  fun toType(): SKJSON.Type {
+    this.value.toCJSON().toType();
+  }
 }
 
 value class CJFields(cols: Array<String>, values: Array<CJSON>) uses Orderable {

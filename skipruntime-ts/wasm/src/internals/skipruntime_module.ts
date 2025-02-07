@@ -17,8 +17,11 @@ import type {
   ExternalService,
   Resource,
   Watermark,
+  EagerCollection,
+  LazyCollection,
 } from "@skipruntime/core";
 import {
+  JconConverterWithCollections,
   ServiceInstance,
   ToBinding,
   type JSONLazyCompute,
@@ -33,7 +36,8 @@ import type {
   Notifier,
 } from "@skipruntime/core/binding.js";
 
-import type { Json } from "@skipruntime/core/json.js";
+import type { Exportable } from "@skipruntime/core/json.js";
+import type { Json } from "@skipruntime/core";
 import {
   toPtr,
   toNullablePtr,
@@ -831,10 +835,26 @@ class LinksImpl implements Links {
   complete(utils: Utils, exports: object) {
     this.utils = utils;
     const fromBinding = new WasmFromBinding(utils, exports as FromWasm);
+    const skjson = this.env.shared.get("SKJSON")! as SKJSONShared;
+    const defaultConverter = skjson.converter;
     this.tobinding = new ToBinding(
       fromBinding,
       utils.runWithGc.bind(utils),
-      () => (this.env.shared.get("SKJSON")! as SKJSONShared).converter,
+      (
+        eagerCollectionBuilder: (
+          object: Exportable<undefined>,
+        ) => EagerCollection<Json, Json>,
+        lazyCollectionBuilder: (
+          object: Exportable<undefined>,
+        ) => LazyCollection<Json, Json>,
+      ) =>
+        defaultConverter.derive(
+          new JconConverterWithCollections(
+            defaultConverter,
+            eagerCollectionBuilder,
+            lazyCollectionBuilder,
+          ),
+        ),
       (skExc: Pointer<Internal.Exception>) =>
         this.utils.getErrorObject(toPtr(skExc)),
     );
