@@ -5,3 +5,4 @@
 [submodule "www/docs_site"]
 	path = www/docs_site
 	url = git@github.com:SkipLabs/docs_site.git
+    ignore = dirty
