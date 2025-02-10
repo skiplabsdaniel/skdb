@@ -50,9 +50,8 @@ const server = await runService(service, {
   control_port: 3590,
 });
 
-function shutdown() {
-  server.close();
+async function shutdown() {
+  await server.close();
 }
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+["SIGTERM", "SIGINT"].map((sig) => process.on(sig, shutdown));

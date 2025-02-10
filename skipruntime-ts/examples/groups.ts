@@ -90,9 +90,9 @@ const server = await runService(service, {
   streaming_port: 8080,
   control_port: 8081,
 });
-function shutdown() {
-  server.close();
+
+async function shutdown() {
+  await server.close();
 }
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+["SIGTERM", "SIGINT"].map((sig) => process.on(sig, shutdown));

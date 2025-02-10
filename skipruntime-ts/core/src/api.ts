@@ -550,7 +550,7 @@ export interface ExternalService {
    *
    * @returns {void}
    */
-  shutdown(): void;
+  shutdown(): Promise<void>;
 }
 
 /**

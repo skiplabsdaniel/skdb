@@ -436,7 +436,7 @@ class MockExternal implements ExternalService {
   }
 
   shutdown() {
-    return;
+    return Promise.resolve();
   }
 
   private async mock(
@@ -1121,7 +1121,7 @@ export function initTests(
       [1, [[20, 31]]],
     ]);
     service.closeResourceInstance(constantResourceId);
-    service.close();
+    await service.close();
   });
 
   it("testCloseSession", async () => {
@@ -1136,7 +1136,7 @@ export function initTests(
     const current = service.getArray(resource, "5ms").payload;
     expect(current == start).toEqual(false);
     service.closeResourceInstance(constantResourceId);
-    service.close();
+    await service.close();
   });
 
   it("testMultipleResources", async () => {
@@ -1188,7 +1188,7 @@ export function initTests(
       [3, [33]],
     ]);
 
-    service.close();
+    await service.close();
   });
 
   it("testLazyWithUseExternalService", async () => {
