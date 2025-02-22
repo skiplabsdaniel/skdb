@@ -36,7 +36,7 @@ class Env(
   }
 
   fun relative(path: String): String {
-    relative(path, this.refDir).fromSome()
+    relative(path, this.refDir).default(path)
   }
 
   fun targetPath(path: String, ext: String): String {
@@ -242,13 +242,12 @@ fun buildLibrary(
   includeOptions = includeDirs.map(i -> `-I${i}`);
   if (sourcesTime.isYoungerThan(target)) {
     objects = Array[];
-    sources.each(tsd ->
-      !objects = objects.concat(
-        tsd
-          .map(f -> compileFile(env, isWasm, f, includeChecker, includeOptions))
-          .toArray(),
-      )
-    );
+    sources.each(tsd -> {
+      new_objects = tsd
+        .map(f -> compileFile(env, isWasm, f, includeChecker, includeOptions))
+        .toArray();
+      !objects = objects.concat(new_objects)
+    });
     cmd = Array["llvm-ar", "rcs", target].concat(objects).concat(resources);
     run(cmd, env.verbose);
   };
@@ -387,10 +386,10 @@ fun compileFile(
   optObject: ?String = None(),
 ): String {
   ext = ".o";
-  object = optObject match {
-  | Some(o) -> o
-  | _ -> env.targetPath(source, ext)
-  };
+  debug(("0", optObject, source, ext));
+  default = env.targetPath(source, ext);
+  object = optObject.default(default);
+  debug((optObject, object));
   if (includesChecker.add(source).isYoungerThan(object)) {
     flags = Array[
       "-Werror",
